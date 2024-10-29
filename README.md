@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">Stratified Domain Adaptation (StrDA): A Progressive Self-Training Approach for Scene Text Recognition</h1>
+  <h1 align="center">Stratified Domain Adaptation: A Progressive Self-Training Approach for Scene Text Recognition</h1>
   <h3 align="center">WACV 2025 Early Acceptance (Round 1)</h3>
 </p>
 
