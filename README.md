@@ -1,4 +1,7 @@
-# Stratified Domain Adaptation (StrDA): A Progressive Self-Training Approach for Scene Text Recognition
+<p align="center">
+  <h1 align="center">Stratified Domain Adaptation (StrDA): A Progressive Self-Training Approach for Scene Text Recognition</h1>
+  <h3 align="center">WACV 2025 Early Acceptance (Round 1)</h3>
+</p>
 
 This is the official implementation of the [StrDA paper](https://arxiv.org/abs/2410.09913):
 ```
