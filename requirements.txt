@@ -1,0 +1,5 @@
+lmdb
+tqdm
+nltk
+pillow
+opencv-python
