@@ -1,7 +1,7 @@
 import random
 import logging
-import numpy as np
 
+import numpy as np
 import PIL
 import PIL.ImageOps
 import PIL.ImageDraw

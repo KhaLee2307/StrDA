@@ -2,14 +2,17 @@ import os
 import sys
 import random
 import argparse
+
 import numpy as np
 from tqdm import tqdm
+from PIL import ImageFile
 
 import torch
 import torch.backends.cudnn as cudnn
 
 from utils.averager import Averager
 from utils.converter import AttnLabelConverter, CTCLabelConverter
+from utils.load_config import load_config
 
 from source.model import Model
 from source.dataset import hierarchical_dataset, get_dataloader
@@ -18,60 +21,64 @@ from test import validation
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+torch.multiprocessing.set_sharing_strategy("file_system")
 
-def main(opt):
+
+def supervised_learning(args):
     dashed_line = "-" * 80
     main_log = ""
-    opt_log = dashed_line + "\n"
+    args_log = dashed_line + "\n"
 
     """ Dataset preparation """
     # source data
-    train_data, train_data_log = hierarchical_dataset(opt.train_data, opt)
-    if opt.aug:
-        train_loader = get_dataloader(opt, train_data, opt.batch_size, shuffle = True, mode = "supervised")
+    train_data, train_data_log = hierarchical_dataset(args.train_data, args)
+    if args.aug:
+        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle = True, mode = "supervised")
     else:
-        train_loader = get_dataloader(opt, train_data, opt.batch_size, shuffle = True)
+        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle = True)
     
-    opt_log += train_data_log
+    args_log += train_data_log
 
     # validation data
-    valid_data, valid_data_log = hierarchical_dataset(opt.valid_data, opt)
-    valid_loader = get_dataloader(opt, valid_data, opt.batch_size_val, shuffle = False) # 'True' to check training progress with validation function.
+    valid_data, valid_data_log = hierarchical_dataset(args.valid_data, args)
+    valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle = False) # "True" to check training progress with validation function.
     
-    opt_log += valid_data_log
+    args_log += valid_data_log
 
     del train_data, valid_data, train_data_log, valid_data_log
 
     """ Model configuration """
-    if opt.Prediction == "CTC":
-        converter = CTCLabelConverter(opt.character)
+    if args.Prediction == "CTC":
+        converter = CTCLabelConverter(args.character)
     else:
-        converter = AttnLabelConverter(opt.character)
-        opt.sos_token_index = converter.dict["[SOS]"]
-        opt.eos_token_index = converter.dict["[EOS]"]
-    opt.num_class = len(converter.character)
+        converter = AttnLabelConverter(args.character)
+        args.sos_token_index = converter.dict["[SOS]"]
+        args.eos_token_index = converter.dict["[EOS]"]
+    args.num_class = len(converter.character)
     
     # setup model
-    model = Model(opt)
-    opt_log += "Init model\n"
+    model = Model(args)
+    args_log += "Init model\n"
 
     # data parallel for multi-GPU
     model = torch.nn.DataParallel(model).to(device)
     model.train()
 
     # load pretrained model
-    pretrained = torch.load(opt.saved_model)
-    model.load_state_dict(pretrained)
-    torch.save(
-            pretrained,
-            f"./trained_model/{opt.model}_bestmodel.pth"
-        )
-    opt_log += "Load pretrained model\n"
+    if args.saved_model != "":
+        pretrained = torch.load(args.saved_model)
+        model.load_state_dict(pretrained)
+        torch.save(
+                pretrained,
+                f"./trained_model/{args.model}_bestmodel.pth"
+            )
+        args_log += "Load pretrained model\n"
 
-    del pretrained
+        del pretrained
 
     """ Setup loss """
-    if opt.Prediction == "CTC":
+    if args.Prediction == "CTC":
         criterion = torch.nn.CTCLoss(zero_infinity=True).to(device)
     else:
         # ignore [PAD] token
@@ -84,33 +91,33 @@ def main(opt):
         filtered_parameters.append(p)
         params_num.append(np.prod(p.size()))
     print(f"Trainable params num: {sum(params_num)}")
-    opt_log += f"Trainable params num: {sum(params_num)}"
+    args_log += f"Trainable params num: {sum(params_num)}"
 
     del params_num
 
     """ Final options """
-    opt_log += "------------ Options -------------\n"
-    args = vars(opt)
-    for k, v in args.items():
+    args_log += "------------ Options -------------\n"
+    opt = vars(args)
+    for k, v in opt.items():
         if str(k) == "character" and len(str(v)) > 500:
-            opt_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
+            args_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
         else:
-            opt_log += f"{str(k)}: {str(v)}\n"
-    opt_log += "---------------------------------------\n"
-    print(opt_log)
-    main_log += opt_log
+            args_log += f"{str(k)}: {str(v)}\n"
+    args_log += "---------------------------------------\n"
+    print(args_log)
+    main_log += args_log
     print("Start Training...\n")
     main_log += "Start Training...\n"
 
-    total_iter = (opt.num_epoch * len(train_loader))
+    total_iter = (args.epochs * len(train_loader))
 
     # set up optimizer
-    optimizer = torch.optim.AdamW(filtered_parameters, lr=opt.lr, weight_decay = 0.01)
+    optimizer = torch.optim.AdamW(filtered_parameters, lr=args.lr, weight_decay=args.weight_decay)
 
     # set up scheduler
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
-                max_lr=opt.lr,
+                max_lr=args.lr,
                 cycle_momentum=False,
                 div_factor=20,
                 final_div_factor=1000,
@@ -118,7 +125,7 @@ def main(opt):
             )
     
     train_loss_avg = Averager()
-    best_score = float('-inf')
+    best_score = float("-inf")
     score_descent = 0
     iteration = 0
 
@@ -126,7 +133,7 @@ def main(opt):
 
     model.train()
     # training loop
-    for epoch in tqdm(range(opt.num_epoch)):
+    for epoch in tqdm(range(args.epochs)):
 
         for (images, labels) in tqdm(train_loader):
             batch_size = len(labels)
@@ -135,10 +142,10 @@ def main(opt):
 
             images_tensor = images.to(device)          
             labels_index, labels_length = converter.encode(
-                labels, batch_max_length=opt.batch_max_length
+                labels, batch_max_length=args.batch_max_length
             )
             
-            if opt.Prediction == "CTC":
+            if args.Prediction == "CTC":
                 preds = model(images_tensor)
                 preds_size = torch.IntTensor([preds.size(1)] * batch_size)
                 preds_log_softmax = preds.log_softmax(2).permute(1, 0, 2)
@@ -153,7 +160,7 @@ def main(opt):
             model.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
-                model.parameters(), opt.grad_clip
+                model.parameters(), args.grad_clip
             )   # gradient clipping with 5 (Default)
             optimizer.step()
 
@@ -161,7 +168,7 @@ def main(opt):
 
             scheduler.step()
 
-            if (iteration % opt.val_interval == 0 or iteration == total_iter):
+            if (iteration % args.val_interval == 0 or iteration == total_iter):
                 # valiation part
                 model.eval()
                 with torch.no_grad():
@@ -173,24 +180,24 @@ def main(opt):
                         labels,
                         infer_time,
                         length_of_data,
-                    ) = validation(model, criterion, valid_loader, converter, opt)
+                    ) = validation(model, criterion, valid_loader, converter, args)
                 model.train()
 
                 if (current_score >= best_score):
                     score_descent = 0
 
                     best_score = current_score
-                    torch.save(model.state_dict(), f"./trained_model/{opt.model}_bestmodel.pth")
+                    torch.save(model.state_dict(), f"./trained_model/{args.model}_bestmodel.pth")
                 else:
                     score_descent += 1
 
                 # log
                 lr = optimizer.param_groups[0]["lr"]
-                valid_log = f'\nValidation at {iteration}/{total_iter}:\n'
-                valid_log += f'Train_loss: {train_loss_avg.val():0.3f}, Valid_loss: {valid_loss:0.3f}, '
-                valid_log += f'Current_lr: {lr:0.7f}, '
-                valid_log += f'Current_score: {current_score:0.2f}, Best_score: {best_score:0.2f}, '
-                valid_log += f'Score_descent: {score_descent}\n'
+                valid_log = f"\nValidation at {iteration}/{total_iter}:\n"
+                valid_log += f"Train_loss: {train_loss_avg.val():0.3f}, Valid_loss: {valid_loss:0.3f}, "
+                valid_log += f"Current_lr: {lr:0.7f}, "
+                valid_log += f"Current_score: {current_score:0.2f}, Best_score: {best_score:0.2f}, "
+                valid_log += f"Score_descent: {score_descent}\n"
                 print(valid_log)
 
                 log += valid_log
@@ -208,123 +215,82 @@ def main(opt):
 if __name__ == "__main__":
     """ Argument """ 
     parser = argparse.ArgumentParser()
+    config = load_config("config/default.yaml")
+    parser.set_defaults(**config)
+    
     parser.add_argument(
-        "--train_data",
-        default="data/train/synth/",
-        help="path to source dataset",
+        "--train_data", default="data/train/synth/", help="path to training dataset",
     )
     parser.add_argument(
-        "--valid_data",
-        default="data/val/",
-        help="path to validation dataset",
+        "--valid_data", default="data/val/", help="path to validation dataset",
     )
     parser.add_argument(
-        "--saved_model",
-        required=True, 
-        help="path to saved_model to evaluation"
-    )
-    parser.add_argument("--batch_size", type=int, default=128, help="input batch size")
-    parser.add_argument("--batch_size_val", type=int, default=512, help="input batch size val")
-    parser.add_argument("--num_epoch", type=int, default=3, help="number of iterations to train for each round")
-    parser.add_argument("--val_interval", type=int, default=2000, help="interval between each validation")
-    parser.add_argument(
-        "--workers", type=int, help="number of data loading workers", default=4
+        "--saved_model", default="", help="path to pretrained model (to continue training)",
     )
     parser.add_argument(
-        "--grad_clip", type=float, default=5, help="gradient clipping value. default=5"
-    )
-    """ Data Processing """
-    parser.add_argument(
-        "--batch_max_length", type=int, default=25, help="maximum-label-length"
+        "--batch_size", type=int, default=128, help="input batch size",
     )
     parser.add_argument(
-        "--imgH", type=int, default=32, help="the height of the input image"
+        "--batch_size_val", type=int, default=512, help="input batch size val",
     )
     parser.add_argument(
-        "--imgW", type=int, default=100, help="the width of the input image"
+        "--epochs", type=int, default=20, help="number of epochs to train for",
     )
     parser.add_argument(
-        "--character",
-        type=str,
-        default="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
-        help="character label",
+        "--val_interval", type=int, default=1000, help="interval between each validation",
     )
     parser.add_argument(
-        "--NED", action="store_true", help="for Normalized edit_distance"
+        "--NED", action="store_true", help="for Normalized edit_distance",
     )
     """ Model Architecture """
-    parser.add_argument("--model", type=str, required=True, help="CRNN|TRBA") 
     parser.add_argument(
-        "--num_fiducial",
-        type=int,
-        default=20,
-        help="number of fiducial points of TPS-STN",
+        "--model",
+        type=str,
+        required=True,
+        help="CRNN|TRBA",
     )
+    """ Training """ 
     parser.add_argument(
-        "--input_channel",
-        type=int,
-        default=3,
-        help="the number of input channel of Feature extractor",
+        "--aug", action="store_true", default=False, help="augmentation or not",
     )
-    parser.add_argument(
-        "--output_channel",
-        type=int,
-        default=512,
-        help="the number of output channel of Feature extractor",
-    )
-    parser.add_argument(
-        "--hidden_size", type=int, default=256, help="the size of the LSTM hidden state"
-    )
-    """ Optimizer """ 
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=0.001,
-        help="learning rate, 0.001 for Adam",
-    )
-    """ Experiment """ 
-    parser.add_argument(
-        "--manual_seed", type=int, default=111, help="for random seed setting"
-    )
-    parser.add_argument("--aug", action='store_true', default=False, help='augmentation or not')
 
-    opt = parser.parse_args()
+    args = parser.parse_args()
 
-    opt.use_IMAGENET_norm = False  # for CRNN and TRBA
+    args.use_IMAGENET_norm = False  # for CRNN and TRBA
     
-    if opt.model == "CRNN":  # CRNN = NVBC
-        opt.Transformation = "None"
-        opt.FeatureExtraction = "VGG"
-        opt.SequenceModeling = "BiLSTM"
-        opt.Prediction = "CTC"
+    if args.model == "CRNN":  # CRNN = NVBC
+        args.Transformation = "None"
+        args.FeatureExtraction = "VGG"
+        args.SequenceModeling = "BiLSTM"
+        args.Prediction = "CTC"
 
-    elif opt.model == "TRBA":  # TRBA
-        opt.Transformation = "TPS"
-        opt.FeatureExtraction = "ResNet"
-        opt.SequenceModeling = "BiLSTM"
-        opt.Prediction = "Attn"
+    elif args.model == "TRBA":  # TRBA
+        args.Transformation = "TPS"
+        args.FeatureExtraction = "ResNet"
+        args.SequenceModeling = "BiLSTM"
+        args.Prediction = "Attn"
 
     """ Seed and GPU setting """   
-    random.seed(opt.manual_seed)
-    np.random.seed(opt.manual_seed)
-    torch.manual_seed(opt.manual_seed)
-    torch.cuda.manual_seed(opt.manual_seed)
+    random.seed(args.manual_seed)
+    np.random.seed(args.manual_seed)
+    torch.manual_seed(args.manual_seed)
+    torch.cuda.manual_seed(args.manual_seed)
 
     cudnn.benchmark = True  # it fasten training
     cudnn.deterministic = True
 
     if sys.platform == "win32":
-        opt.workers = 0
+        args.workers = 0
 
-    opt.gpu_name = "_".join(torch.cuda.get_device_name().split())
+    args.gpu_name = "_".join(torch.cuda.get_device_name().split())
     if sys.platform == "linux":
-        opt.CUDA_VISIBLE_DEVICES = os.environ["CUDA_VISIBLE_DEVICES"]
+        args.CUDA_VISIBLE_DEVICES = os.environ["CUDA_VISIBLE_DEVICES"]
     else:
-        opt.CUDA_VISIBLE_DEVICES = 0  # for convenience
+        args.CUDA_VISIBLE_DEVICES = 0  # for convenience
 
     command_line_input = " ".join(sys.argv)
     print(
-        f"Command line input: CUDA_VISIBLE_DEVICES={opt.CUDA_VISIBLE_DEVICES} python {command_line_input}"
+        f"Command line input: CUDA_VISIBLE_DEVICES={args.CUDA_VISIBLE_DEVICES} python {command_line_input}"
     )
 
-    main(opt)
+    supervised_learning(args)

@@ -1,0 +1,34 @@
+# Data Processing
+batch_max_length: 25 # maximum-label-length
+imgH: 32 # the height of the input image
+imgW: 100 # the width of the input image
+character: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~" # character label
+
+# Model Architecture
+num_fiducial: 20 # number of fiducial points of TPS-STN"
+input_channel: 3 # the number of input channel of Feature extractor
+output_channel: 512 # the number of output channel of Feature extractor
+hidden_size: 256 # the size of the LSTM hidden state
+
+# Optimizer
+lr: 0.001 # learning rate, 0.001 for Adam
+weight_decay: 0.01 # weight decay, 0.01 for Adam
+
+# Experiment
+manual_seed: 111 # for random seed setting
+
+# Training
+grad_clip: 5 # gradient clipping value
+workers: 4 # number of data loading workers
+
+# HDGE
+decay_epoch: 100 # epoch from which to start lr decay
+load_height: 48
+load_width: 160
+crop_height: 32
+crop_width: 100
+lamda: 10
+idt_coef: 0.5
+ngf: 64 # of gen filters in first conv layer
+ndf: 64 # of discrim filters in first conv layer
+norm: "instance" # instance normalization or batch normalization

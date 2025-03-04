@@ -1,5 +1,6 @@
 import os
 import itertools
+
 import numpy as np
 from tqdm import tqdm
 
@@ -8,10 +9,10 @@ from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import Subset
 
-import utils.utils_HDGE as utils
-
 from .ops import set_grad
 from .dataset import AlignCollateHDGE, hierarchical_dataset
+
+import utils.utils_HDGE as utils
 
 from modules.generators import define_Gen
 from modules.discriminators import define_Dis
@@ -47,7 +48,7 @@ class HDGE(object):
             os.makedirs(args.checkpoint_dir)
 
         try:
-            ckpt = utils.load_checkpoint('%s/latest.ckpt' % (args.checkpoint_dir))
+            ckpt = utils.load_checkpoint('%s/HDGE_gen_dis.ckpt' % (args.checkpoint_dir))
             self.start_epoch = ckpt['epoch']
             self.Da.load_state_dict(ckpt['Da'])
             self.Db.load_state_dict(ckpt['Db'])
@@ -73,7 +74,7 @@ class HDGE(object):
             source_data,
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=args.num_workers,
+            num_workers=args.workers,
             collate_fn=myAlignCollate,
             pin_memory=False,
             drop_last=True,
@@ -82,7 +83,7 @@ class HDGE(object):
             target_data_adjust,
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=args.num_workers,
+            num_workers=args.workers,
             collate_fn=myAlignCollate,
             pin_memory=False,
             drop_last=True,
@@ -182,8 +183,8 @@ class HDGE(object):
                 b_dis_loss.backward()
                 self.d_optimizer.step()
 
-            print("\nEpoch: (%3d/%3d) | Gen Loss: %0.4f | Dis Loss: %0.4f" % 
-                    (epoch, args.epochs, gen_loss,a_dis_loss+b_dis_loss))
+            print("\nEpoch: (%3d/%3d) | Gen Loss: %0.4f | Dis Loss: %0.4f\n" % 
+                    (epoch + 1, args.epochs, gen_loss,a_dis_loss+b_dis_loss))
 
             # override the latest checkpoint
             utils.save_checkpoint({'epoch': epoch + 1,

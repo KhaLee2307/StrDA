@@ -1,4 +1,5 @@
 import os
+
 import numpy as np
 from tqdm import tqdm
 
@@ -6,14 +7,14 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Subset
 
-from source.dataset import Pseudolabel_Dataset, AlignCollateHDGE, get_dataloader
+from .dataset import Pseudolabel_Dataset, AlignCollateHDGE, get_dataloader
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DomainStratifying(object):
     def __init__(
-        self, opt, select_data
+        self, args, select_data
     ):
         """
         Stage 1: Domain Stratifying for Stratified Domain Adaptation using 2 main methods:
@@ -23,28 +24,28 @@ class DomainStratifying(object):
 
         Parameters
         ----------
-        opt: argparse.ArgumentParser().parse_args()
+        args: argparse.ArgumentParser().parse_args()
             argument
         select_data: list()
             the array of selected data
         """
 
-        self.opt = opt
-        self.num_subsets = opt.num_subsets    # the number of subsets
+        self.args = args
+        self.num_subsets = args.num_subsets    # the number of subsets
         self.remain_data = select_data   # the number of remain data after selection steps
         self.k_number = len(select_data) // self.num_subsets    # the number of data point per subset
         self.distance = [] # the order of data after processing
 
         # make dir      
-        os.makedirs(f'stratify/{self.opt.method}/', exist_ok=True)
+        os.makedirs(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/', exist_ok=True)
 
     def save_subset(self):
         
         result_index = [u[0] for u in self.distance]
         result_distance = [u[1] for u in self.distance]
 
-        np.save(f'stratify/{self.opt.method}/subset_distance.npy', result_distance)
-        np.save(f'stratify/{self.opt.method}/subset_index.npy', result_index)
+        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/{self.args.method}_distance.npy', result_distance)
+        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/{self.args.method}_index.npy', result_index)
         
         for iter in range(self.num_subsets // 2):
             # select k_number lowest distance
@@ -58,14 +59,14 @@ class DomainStratifying(object):
             source = np.array(add_source, dtype=np.int32)
             target = np.array(add_target, dtype=np.int32)
             
-            np.save(f'stratify/{self.opt.method}/subset_{iter + 1}.npy', source)
-            np.save(f'stratify/{self.opt.method}/subset_{self.num_subsets - iter}.npy', target)
+            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{iter + 1}.npy', source)
+            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{self.num_subsets - iter}.npy', target)
 
         if (self.num_subsets % 2 != 0):
             result_index = np.array(result_index, dtype=np.int32)
-            np.save(f'stratify/{self.opt.method}/subset_{self.num_subsets // 2 + 1}.npy', result_index)
+            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{self.num_subsets // 2 + 1}.npy', result_index)
 
-        print("\nAll information saved at " + f'stratify/{self.opt.method}/')
+        print("\nAll information saved at " + f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/')
             
     def stratify_DD(self, adapt_data_raw, model):
         """
@@ -89,7 +90,7 @@ class DomainStratifying(object):
 
         # assign pseudo labels by the order of sample in dataset
         unlabel_data_remain = Pseudolabel_Dataset(unlabel_data_remain, self.remain_data)
-        adapt_data_loader = get_dataloader(self.opt, unlabel_data_remain, self.opt.batch_size_val, shuffle=False)
+        adapt_data_loader = get_dataloader(self.args, unlabel_data_remain, self.args.batch_size_val, shuffle=False)
         
         del unlabel_data_remain
 
@@ -137,12 +138,12 @@ class DomainStratifying(object):
 
         unlabel_data_remain = Subset(adapt_data_raw, self.remain_data)
        
-        myAlignCollate = AlignCollateHDGE(self.opt, infer=True)
+        myAlignCollate = AlignCollateHDGE(self.args, infer=True)
         adapt_data_loader = torch.utils.data.DataLoader(
             unlabel_data_remain,
-            batch_size=self.opt.batch_size_val,
+            batch_size=self.args.batch_size_val,
             shuffle=False,
-            num_workers=self.opt.num_workers,
+            num_workers=self.args.workers,
             collate_fn=myAlignCollate,
             pin_memory=False,
             drop_last=False,
@@ -175,8 +176,8 @@ class DomainStratifying(object):
                 source_loss.extend(source_batch_loss)
                 target_loss.extend(target_batch_loss)
 
-        np.save(f'stratify/{self.opt.method}/source_loss.npy', source_loss)
-        np.save(f'stratify/{self.opt.method}/target_loss.npy', target_loss)
+        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/source_loss.npy', source_loss)
+        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/target_loss.npy', target_loss)
 
         # calculate di
         def formula(source_loss, target_loss, beta=1):

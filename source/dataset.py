@@ -1,8 +1,9 @@
 import os
 import sys
 import six
-import PIL
 import lmdb
+
+import PIL
 from PIL import Image
 
 import torch
@@ -15,13 +16,13 @@ _MEAN_IMAGENET = torch.tensor([0.485, 0.456, 0.406])
 _STD_IMAGENET  = torch.tensor([0.229, 0.224, 0.225])
 
 
-def get_dataloader(opt, dataset, batch_size, shuffle = False, mode = "label"):
+def get_dataloader(args, dataset, batch_size, shuffle = False, mode = "label"):
     """
     Get dataloader for each dataset
 
     Parameters
     ----------
-    opt: argparse.ArgumentParser().parse_args()
+    args: argparse.ArgumentParser().parse_args()
     dataset: torch.utils.data.Dataset
     batch_size: int
     shuffle: boolean
@@ -32,15 +33,15 @@ def get_dataloader(opt, dataset, batch_size, shuffle = False, mode = "label"):
     """
 
     if mode == "raw":
-        myAlignCollate = AlignCollateRaw(opt)
+        myAlignCollate = AlignCollateRaw(args)
     else:
-        myAlignCollate = AlignCollate(opt, mode)
+        myAlignCollate = AlignCollate(args, mode)
 
     data_loader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=opt.workers,
+            num_workers=args.workers,
             collate_fn=myAlignCollate,
             pin_memory=False,
             drop_last=False,
@@ -48,7 +49,7 @@ def get_dataloader(opt, dataset, batch_size, shuffle = False, mode = "label"):
     return data_loader
 
 
-def hierarchical_dataset(root, opt, mode="label", drop_data=[]):
+def hierarchical_dataset(root, args, mode="label", drop_data=[]):
     """ select_data='/' contains all sub-directory of root directory """
     dataset_list = []
     dataset_log = f"dataset_root:    {root}\t dataset:"
@@ -72,10 +73,10 @@ def hierarchical_dataset(root, opt, mode="label", drop_data=[]):
     for dirpath in listdir:
         if mode == "raw":
             # load data without label
-            dataset = LmdbDataset_raw(dirpath, opt)
+            dataset = LmdbDataset_raw(dirpath, args)
         else:
             # load data with label
-            dataset = LmdbDataset(dirpath, opt)
+            dataset = LmdbDataset(dirpath, args)
         sub_dataset_log = f"sub-directory:\t/{os.path.relpath(dirpath, root)}\t num samples: {len(dataset)}"
         print(sub_dataset_log)
         dataset_log += f"{sub_dataset_log}\n"
@@ -113,15 +114,15 @@ class Pseudolabel_Dataset(Dataset):
 
 class AlignCollate(object):
     """ Transform data to the same format """
-    def __init__(self, opt, mode = "label"):
-        self.opt = opt
+    def __init__(self, args, mode = "label"):
+        self.args = args
         # resize image
         if (mode == "adapt" or mode == "supervised"):
             self.transform = Rand_augment()
         else:
             self.transform = torchvision.transforms.Compose([])
 
-        self.resize = ResizeNormalize(opt)
+        self.resize = ResizeNormalize(args)
         print("Use Text_augment", self.transform)
 
     def __call__(self, batch):
@@ -135,10 +136,10 @@ class AlignCollate(object):
 
 class AlignCollateRaw(object):
     """ Transform data to the same format """
-    def __init__(self, opt):
-        self.opt = opt
+    def __init__(self, args):
+        self.args = args
         # resize image
-        self.transform = ResizeNormalize(opt)
+        self.transform = ResizeNormalize(args)
 
     def __call__(self, batch):
         images = batch
@@ -151,20 +152,20 @@ class AlignCollateRaw(object):
 
 class AlignCollateHDGE(object):
     """ Transform data to the same format """
-    def __init__(self, opt, infer=False):
-        self.opt = opt
+    def __init__(self, args, infer=False):
+        self.args = args
 
         # for transforming the input image
         if infer == False:
             transform = torchvision.transforms.Compose(
                 [torchvision.transforms.RandomHorizontalFlip(),
-                torchvision.transforms.Resize((opt.load_height,opt.load_width)),
-                torchvision.transforms.RandomCrop((opt.crop_height,opt.crop_width)),
+                torchvision.transforms.Resize((args.load_height,args.load_width)),
+                torchvision.transforms.RandomCrop((args.crop_height,args.crop_width)),
                 torchvision.transforms.ToTensor(),
                 torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
         else:
             transform = torchvision.transforms.Compose(
-                [torchvision.transforms.Resize((opt.crop_height,opt.crop_width)),
+                [torchvision.transforms.Resize((args.crop_height,args.crop_width)),
                 torchvision.transforms.ToTensor(),
                 torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
@@ -181,10 +182,10 @@ class AlignCollateHDGE(object):
 
 class LmdbDataset(Dataset):
     """ Load data from Lmdb file with label """
-    def __init__(self, root, opt):
+    def __init__(self, root, args):
 
         self.root = root
-        self.opt = opt
+        self.args = args
         self.env = lmdb.open(
             root,
             max_readers=32,
@@ -207,7 +208,7 @@ class LmdbDataset(Dataset):
 
                 # length filtering
                 length_of_label = len(label)
-                if length_of_label > opt.batch_max_length:
+                if length_of_label > args.batch_max_length:
                     continue
 
                 self.filtered_index_list.append(index)
@@ -236,7 +237,7 @@ class LmdbDataset(Dataset):
             except IOError:
                 print(f"Corrupted image for {index}")
                 # make dummy image and dummy label for corrupted image.
-                img = PIL.Image.new("RGB", (self.opt.imgW, self.opt.imgH))
+                img = PIL.Image.new("RGB", (self.args.imgW, self.args.imgH))
                 label = "[dummy_label]"
 
         return (img, label)
@@ -244,10 +245,10 @@ class LmdbDataset(Dataset):
 
 class LmdbDataset_raw(Dataset):
     """ Load data from Lmdb file without label """
-    def __init__(self, root, opt):
+    def __init__(self, root, args):
 
         self.root = root
-        self.opt = opt
+        self.args = args
         self.env = lmdb.open(
             root,
             max_readers=32,
@@ -284,27 +285,21 @@ class LmdbDataset_raw(Dataset):
             except IOError:
                 print(f"Corrupted image for {img_key}")
                 # make dummy image for corrupted image.
-                img = PIL.Image.new("RGB", (self.opt.imgW, self.opt.imgH))
+                img = PIL.Image.new("RGB", (self.args.imgW, self.args.imgH))
 
         return img
 
 
 class ResizeNormalize(object):
 
-    def __init__(self, opt):
-        self.opt = opt
+    def __init__(self, args):
+        self.args = args
         _transforms = []
 
-        _transforms.append(
-            torchvision.transforms.Resize((self.opt.imgH, self.opt.imgW),
-                               interpolation=torchvision.transforms.InterpolationMode.BICUBIC))
+        _transforms.append(torchvision.transforms.Resize((self.args.imgH, self.args.imgW),
+                            interpolation=torchvision.transforms.InterpolationMode.BICUBIC))
         _transforms.append(torchvision.transforms.ToTensor())
-        if self.opt.use_IMAGENET_norm:
-            _transforms.append(torchvision.transforms.Normalize(mean=_MEAN_IMAGENET,
-                                                    std=_STD_IMAGENET))
-        else:
-            _transforms.append(torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                                                std=[0.5, 0.5, 0.5]))
+        _transforms.append(torchvision.transforms.Normalize(mean=_MEAN_IMAGENET, std=_STD_IMAGENET))
         self._transforms = torchvision.transforms.Compose(_transforms)
 
     def __call__(self, image):
