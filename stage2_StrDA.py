@@ -3,9 +3,9 @@ import sys
 import time
 import random
 import argparse
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 from PIL import ImageFile
 
 import torch
@@ -167,7 +167,10 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
                 score_descent = 0
 
                 best_score = current_score
-                torch.save(model.state_dict(), f"./trained_model/{args.method}/StrDA_round{round}.pth")
+                torch.save(
+                    model.state_dict(),
+                    f"./trained_model/{args.method}/StrDA_round{round}.pth",
+                )
             else:
                 score_descent += 1
 
@@ -267,7 +270,7 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
     # save model
     # torch.save(
     #     model.state_dict(),
-    #     f"./trained_model/{args.method}/StrDA_round{round}.pth"
+    #     f"./trained_model/{args.method}/StrDA_round{round}.pth",
     # )
 
     # save log
@@ -332,9 +335,9 @@ def main(args):
     pretrained = torch.load(args.saved_model)
     model.load_state_dict(pretrained)
     torch.save(
-            pretrained,
-            f"./trained_model/{args.method}/StrDA_round0.pth"
-        )
+        pretrained,
+        f"./trained_model/{args.method}/StrDA_round0.pth"
+    )
     args_log += "Load pretrained model\n"
 
     del pretrained
@@ -437,15 +440,18 @@ def main(args):
         print(dashed_line)
         print(dashed_line)
     
+    # free cache
+    torch.cuda.empty_cache()
+    
     # save log
     print(main_log, file= open(f"log/{args.method}/log_StrDA.txt", "w"))
-    return
-            
+    
+    return            
 
 if __name__ == "__main__":
     """ Argument """
     parser = argparse.ArgumentParser()
-    config = load_config("config/default.yaml")
+    config = load_config("config/STR.yaml")
     parser.set_defaults(**config)
 
     parser.add_argument(

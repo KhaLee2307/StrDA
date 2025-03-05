@@ -1,5 +1,6 @@
 import os
 import copy
+
 import numpy as np
 
 import torch
@@ -22,15 +23,15 @@ def cuda(xs):
 
 def get_traindata_link(dataset_dir):
     dirs = {}
-    dirs['trainA'] = os.path.join(dataset_dir, 'ltrainA')
-    dirs['trainB'] = os.path.join(dataset_dir, 'ltrainB')
+    dirs["trainA"] = os.path.join(dataset_dir, "ltrainA")
+    dirs["trainB"] = os.path.join(dataset_dir, "ltrainB")
     return dirs
 
 
 def get_testdata_link(dataset_dir):
     dirs = {}
-    dirs['testA'] = os.path.join(dataset_dir, 'ltestA')
-    dirs['testB'] = os.path.join(dataset_dir, 'ltestB')
+    dirs["testA"] = os.path.join(dataset_dir, "ltestA")
+    dirs["testB"] = os.path.join(dataset_dir, "ltestB")
     return dirs
 
 
@@ -42,7 +43,7 @@ def save_checkpoint(state, save_path):
 # to load the checkpoint
 def load_checkpoint(ckpt_path, map_location=None):
     ckpt = torch.load(ckpt_path, map_location=map_location)
-    print(' [*] Loading checkpoint from %s succeed!' % ckpt_path)
+    print(" [*] Loading checkpoint from %s succeed!" % ckpt_path)
     return ckpt
 
 
@@ -83,12 +84,12 @@ class LambdaLR():
 
 
 def print_networks(nets, names):
-    print('------------Number of Parameters---------------')
+    print("------------Number of Parameters---------------")
     i=0
     for net in nets:
         num_params = 0
         for param in net.parameters():
             num_params += param.numel()
-        print('[Network %s] Total number of parameters : %.3f M' % (names[i], num_params / 1e6))
+        print("[Network %s] Total number of parameters : %.3f M" % (names[i], num_params / 1e6))
         i=i+1
-    print('-----------------------------------------------')
+    print("-----------------------------------------------")

@@ -29,7 +29,7 @@ class NLayerDiscriminator(nn.Module):
         return self.dis_model(input)
 
 
-def define_Dis(input_nc, ndf, n_layers_D=3, norm='batch', gpu_ids=[0]):
+def define_Dis(input_nc, ndf, n_layers_D=3, norm="batch", gpu_ids=[0]):
     dis_net = None
     norm_layer = get_norm_layer(norm_type=norm)
     if type(norm_layer) == functools.partial:

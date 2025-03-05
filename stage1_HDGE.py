@@ -25,50 +25,69 @@ torch.multiprocessing.set_sharing_strategy("file_system")
     
     
 def main(args):
+    dashed_line = "-" * 80
+    
     str_ids = args.gpu_ids.split(",")
     args.gpu_ids = []
     for str_id in str_ids:
         id = int(str_id)
         if id >= 0:
             args.gpu_ids.append(id)
-    print(not args.no_dropout)
+    # print(not args.no_dropout)
     
+    # training part
     if args.train:
-        print("Training")
+        print(dashed_line)
         model = md.HDGE(args)
         model.train(args)
-    if args.infer:
-        print("Inference")
+    
+    # inference part
+    print(dashed_line)
+    print("Start Inference")
 
-        # load target data (raw)
-        target_data, _ = hierarchical_dataset(args.target_data, args, mode = "raw")
+    # load target data (raw)
+    print("Load target domain data for inference...")
+    target_data_raw, _ = hierarchical_dataset(args.target_data, args, mode = "raw")
 
-        # select_data = list(np.load(args.select_data))
-        select_data = list(range(len(target_data)))
+    try:
+        select_data = list(np.load(args.select_data))
+    except:
+        print("\n [*][WARNING] NO available select_data!")
+        print(" [*][WARNING] You are using all target domain data!\n")
+        select_data = list(range(len(target_data_raw)))
+    
+    print(dashed_line)
 
-        # setup Harmonic Domain Gap Estimator (HDGE)
-        hdge = DomainStratifying(args, select_data)
+    # setup Harmonic Domain Gap Estimator (HDGE)
+    args.saved_path = f"stratify/{args.method}/{args.beta}"
+    hdge = DomainStratifying(args, select_data)
 
-        dis_source = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
-        dis_target = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
+    dis_source = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
+    dis_target = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
 
-        utils.print_networks([dis_source,dis_target], ["Da","Db"])
+    utils.print_networks([dis_source,dis_target], ["Da","Db"])
 
-        try:
-            ckpt = utils.load_checkpoint("%s/HDGE_gen_dis.ckpt" % (args.checkpoint_dir))
-            dis_source.load_state_dict(ckpt["Da"])
-            dis_target.load_state_dict(ckpt["Db"])
-        except:
-            print(" [*] No checkpoint!")
-
+    try:
+        ckpt = utils.load_checkpoint("%s/HDGE_gen_dis.ckpt" % (args.checkpoint_dir))
+        dis_source.load_state_dict(ckpt["Da"])
+        dis_target.load_state_dict(ckpt["Db"])
+        
         # Domain Stratifying
-        hdge.stratify_HDGE(target_data, dis_source, dis_target, args.beta)
+        hdge.stratify_HDGE(target_data_raw, dis_source, dis_target, args.beta)
+    
+    except:
+        print("\n [*][WARNING] STOP Domain Stratifying!")
+        print(" [*][WARNING] NO checkpoint!")
+        print(" [*][WARNING] Please train the model first!")
+        print(" [*][WARNING] Please check the checkpoint directory!\n")
+    
+    print(dashed_line)
 
 
 if __name__ == "__main__":
     """ Argument """
     parser = argparse.ArgumentParser()
-    config = load_config("config/default.yaml")
+    config = load_config("config/HDGE.yaml")
     parser.set_defaults(**config)
     
     parser.add_argument(
@@ -83,6 +102,9 @@ if __name__ == "__main__":
         help="path to select data",
     )
     parser.add_argument(
+        "--checkpoint_dir", type=str, default="stratify/HDGE/", help="models are saved here",
+    )
+    parser.add_argument(
         "--batch_size", type=int, default=16, help="input batch size",
     )
     parser.add_argument(
@@ -90,9 +112,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--epochs", type=int, default=20, help="number of epochs to train for",
-    )
-    parser.add_argument(
-        "--checkpoint_dir", type=str, default="stratify/HDGE/", help="models are saved here",
     )
     parser.add_argument(
         "--no_dropout", action="store_true", help="no dropout for the generator",
@@ -108,9 +127,6 @@ if __name__ == "__main__":
         help="hyper-parameter n, number of subsets partitioned from target domain data",
     )
     parser.add_argument(
-        "--method", default="HDGE", help="select Domain Stratifying method, DD|HDGE",
-    )
-    parser.add_argument(
         "--beta",
         type=float,
         required=True,
@@ -118,9 +134,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--train", action="store_true", default=False, help="training or not",
-    )
-    parser.add_argument(
-        "--infer", action="store_true", default=False, help="inference or not",
     )
 
     args = parser.parse_args()

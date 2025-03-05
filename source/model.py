@@ -109,10 +109,7 @@ class Model(nn.Module):
     
 
 class BaselineClassifier(nn.Module):
-    """
-    Baseline model for discriminaton method
-    
-    """
+    """ Baseline model for discriminaton method """
 
     def __init__(self, args):
         super(BaselineClassifier, self).__init__()
@@ -153,7 +150,7 @@ class BaselineClassifier(nn.Module):
             (None, 1)
         )  # Transform final (imgH/16-1) -> 1
 
-        """ Binary classifier"""
+        """ Binary classifier """
         self.AdaptiveAvgPool_2 = nn.AdaptiveAvgPool2d((None, 1))
         self.Classifier_input = self.FeatureExtraction_output
         self.predict = nn.Linear(self.Classifier_input, 1)
@@ -179,7 +176,7 @@ class BaselineClassifier(nn.Module):
             )  # [b, c, w] -> [b, c, 1]
         visual_feature = visual_feature.squeeze(2)  # [b, c, 1] -> [b, c]
         
-        """ Binary classifier"""
+        """ Binary classifier """
         output = self.predict(visual_feature) # [b, c] -> [b, class]
 
         if extract_feature == True:

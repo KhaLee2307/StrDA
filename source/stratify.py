@@ -1,7 +1,7 @@
 import os
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
@@ -31,21 +31,27 @@ class DomainStratifying(object):
         """
 
         self.args = args
+        self.method = args.method
+        self.saved_path = args.saved_path # the path to save the result of stratifying method
         self.num_subsets = args.num_subsets    # the number of subsets
         self.remain_data = select_data   # the number of remain data after selection steps
         self.k_number = len(select_data) // self.num_subsets    # the number of data point per subset
         self.distance = [] # the order of data after processing
 
         # make dir      
-        os.makedirs(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/', exist_ok=True)
+        os.makedirs(f"{self.saved_path}/{self.num_subsets}_subsets/", exist_ok=True)
 
     def save_subset(self):
         
         result_index = [u[0] for u in self.distance]
         result_distance = [u[1] for u in self.distance]
 
-        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/{self.args.method}_distance.npy', result_distance)
-        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/{self.args.method}_index.npy', result_index)
+        if self.method == "DD":
+            np.save(f"{self.saved_path}/{self.method}_{self.args.discriminator}_distance.npy", result_distance)
+            np.save(f"{self.saved_path}/{self.method}_{self.args.discriminator}_index.npy", result_index)
+        else:
+            np.save(f"{self.saved_path}/{self.method}_{self.args.beta}_distance.npy", result_distance)
+            np.save(f"{self.saved_path}/{self.method}_{self.args.beta}_index.npy", result_index)
         
         for iter in range(self.num_subsets // 2):
             # select k_number lowest distance
@@ -59,14 +65,14 @@ class DomainStratifying(object):
             source = np.array(add_source, dtype=np.int32)
             target = np.array(add_target, dtype=np.int32)
             
-            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{iter + 1}.npy', source)
-            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{self.num_subsets - iter}.npy', target)
+            np.save(f"{self.saved_path}/{self.num_subsets}_subsets/subset_{iter + 1}.npy", source)
+            np.save(f"{self.saved_path}/{self.num_subsets}_subsets/subset_{self.num_subsets - iter}.npy", target)
 
         if (self.num_subsets % 2 != 0):
             result_index = np.array(result_index, dtype=np.int32)
-            np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/subset_{self.num_subsets // 2 + 1}.npy', result_index)
+            np.save(f"{self.saved_path}/{self.num_subsets}_subsets/subset_{self.num_subsets // 2 + 1}.npy", result_index)
 
-        print("\nAll information saved at " + f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/')
+        print("\nAll information saved at " + f"{self.saved_path}/{self.num_subsets}_subsets/")
             
     def stratify_DD(self, adapt_data_raw, model):
         """
@@ -77,14 +83,13 @@ class DomainStratifying(object):
         adapt_data_raw: torch.utils.data.Dataset
             adapt data
         model: Model
-            discriminator module
+            discriminator module for stratifying
         
         Return
         ----------
         """
 
-        print("-" * 80)
-        print("Domain Stratifying ...")
+        print("Start Domain Stratifying (Domain Discriminator - DD)...\n")
 
         unlabel_data_remain = Subset(adapt_data_raw, self.remain_data)
 
@@ -109,7 +114,10 @@ class DomainStratifying(object):
             # sort result by probability in ascending order
             result = sorted(result, key=lambda x: x[1])
 
+            print("\n20-lowest distance:")
             print(result[:20])
+            
+            print("\n20-highest distance:")
             print(result[-20:])
 
             self.distance = result
@@ -128,13 +136,14 @@ class DomainStratifying(object):
             discriminator of source module
         dis_target: Model
             discriminator of target module
+        beta: float
+            hyperparameter for HDGE method (default: 1)
         
         Return
         ----------
         """
 
-        print("-" * 80)
-        print("Domain Stratifying ...")
+        print("Start Domain Stratifying (Harmonic Domain Gap Estimator - HDGE)...\n")
 
         unlabel_data_remain = Subset(adapt_data_raw, self.remain_data)
        
@@ -176,8 +185,8 @@ class DomainStratifying(object):
                 source_loss.extend(source_batch_loss)
                 target_loss.extend(target_batch_loss)
 
-        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/source_loss.npy', source_loss)
-        np.save(f'stratify/{self.args.method}/{self.args.num_subsets}_subsets/target_loss.npy', target_loss)
+        np.save(f"{self.saved_path}/source_loss.npy", source_loss)
+        np.save(f"{self.saved_path}/target_loss.npy", target_loss)
 
         # calculate di
         def formula(source_loss, target_loss, beta=1):
@@ -191,7 +200,10 @@ class DomainStratifying(object):
 
         self.distance = result
 
+        print("\n20-lowest distance:")
         print(result[:20])
+        
+        print("\n20-highest distance:")
         print(result[-20:])
 
         self.save_subset()

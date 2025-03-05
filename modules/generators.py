@@ -32,7 +32,7 @@ class ResnetGenerator(nn.Module):
         return self.res_model(x)
 
 
-def define_Gen(input_nc, output_nc, ngf, norm='batch', use_dropout=False, gpu_ids=[0]):
+def define_Gen(input_nc, output_nc, ngf, norm="batch", use_dropout=False, gpu_ids=[0]):
     gen_net = None
     norm_layer = get_norm_layer(norm_type=norm)
 

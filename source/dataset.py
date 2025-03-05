@@ -50,7 +50,7 @@ def get_dataloader(args, dataset, batch_size, shuffle = False, mode = "label"):
 
 
 def hierarchical_dataset(root, args, mode="label", drop_data=[]):
-    """ select_data='/' contains all sub-directory of root directory """
+    """ select_data="/" contains all sub-directory of root directory """
     dataset_list = []
     dataset_log = f"dataset_root:    {root}\t dataset:"
     print(dataset_log)
@@ -328,8 +328,8 @@ class Weak_augment(object):
 class Rand_augment(object):
 
     def __init__(self):
-        self.first_augmentor = Augmentor(2, 5, 'spatial')
-        self.augmentor = Augmentor(2, 10, 'channel')
+        self.first_augmentor = Augmentor(2, 5, "spatial")
+        self.augmentor = Augmentor(2, 10, "channel")
 
     def __call__(self, image):
         image = self.first_augmentor(image)

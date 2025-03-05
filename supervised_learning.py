@@ -2,9 +2,9 @@ import os
 import sys
 import random
 import argparse
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 from PIL import ImageFile
 
 import torch
@@ -25,28 +25,36 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-def supervised_learning(args):
+def main(args):
     dashed_line = "-" * 80
     main_log = ""
     args_log = dashed_line + "\n"
-
+    
     """ Dataset preparation """
-    # source data
+    # source domain data
+    print(dashed_line)
+    print("Load training data (source domain)...")
     train_data, train_data_log = hierarchical_dataset(args.train_data, args)
     if args.aug:
-        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle = True, mode = "supervised")
+        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True, mode="supervised")
     else:
-        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle = True)
+        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True)
     
     args_log += train_data_log
 
     # validation data
+    print(dashed_line)
+    print("Load validation data...")
     valid_data, valid_data_log = hierarchical_dataset(args.valid_data, args)
-    valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle = False) # "True" to check training progress with validation function.
+    valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle=False) # "True" to check training progress with validation function.
     
     args_log += valid_data_log
 
     del train_data, valid_data, train_data_log, valid_data_log
+    
+    print(dashed_line)
+    print("Init model")
+    args_log += "Init model\n"
 
     """ Model configuration """
     if args.Prediction == "CTC":
@@ -59,7 +67,6 @@ def supervised_learning(args):
     
     # setup model
     model = Model(args)
-    args_log += "Init model\n"
 
     # data parallel for multi-GPU
     model = torch.nn.DataParallel(model).to(device)
@@ -70,9 +77,10 @@ def supervised_learning(args):
         pretrained = torch.load(args.saved_model)
         model.load_state_dict(pretrained)
         torch.save(
-                pretrained,
-                f"./trained_model/{args.model}_bestmodel.pth"
-            )
+            pretrained,
+            f"./trained_model/{args.model}_supervised.pth",
+        )
+        print(f"Load pretrained model from {args.saved_model}")
         args_log += "Load pretrained model\n"
 
         del pretrained
@@ -96,18 +104,21 @@ def supervised_learning(args):
     del params_num
 
     """ Final options """
+    print("------------ Options -------------")
     args_log += "------------ Options -------------\n"
     opt = vars(args)
     for k, v in opt.items():
         if str(k) == "character" and len(str(v)) > 500:
+            print(f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}")
             args_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
         else:
+            print(f"{str(k)}: {str(v)}")
             args_log += f"{str(k)}: {str(v)}\n"
+    print(dashed_line)
     args_log += "---------------------------------------\n"
-    print(args_log)
     main_log += args_log
-    print("Start Training...\n")
-    main_log += "Start Training...\n"
+    print("Start Supervised Learning (Scene Text Recognition - STR)...\n")
+    main_log += "Start Supervised Learning (Scene Text Recognition - STR)...\n"
 
     total_iter = (args.epochs * len(train_loader))
 
@@ -127,19 +138,17 @@ def supervised_learning(args):
     train_loss_avg = Averager()
     best_score = float("-inf")
     score_descent = 0
-    iteration = 0
 
     log = ""
 
-    model.train()
     # training loop
     for epoch in tqdm(range(args.epochs)):
 
+        # training part
+        model.train()
         for (images, labels) in tqdm(train_loader):
             batch_size = len(labels)
             
-            iteration += 1
-
             images_tensor = images.to(device)          
             labels_index, labels_length = converter.encode(
                 labels, batch_max_length=args.batch_max_length
@@ -168,46 +177,53 @@ def supervised_learning(args):
 
             scheduler.step()
 
-            if (iteration % args.val_interval == 0 or iteration == total_iter):
-                # valiation part
-                model.eval()
-                with torch.no_grad():
-                    (
-                        valid_loss,
-                        current_score,
-                        preds,
-                        confidence_score,
-                        labels,
-                        infer_time,
-                        length_of_data,
-                    ) = validation(model, criterion, valid_loader, converter, args)
-                model.train()
+        # valiation part
+        model.eval()
+        with torch.no_grad():
+            (
+                valid_loss,
+                current_score,
+                preds,
+                confidence_score,
+                labels,
+                infer_time,
+                length_of_data,
+            ) = validation(model, criterion, valid_loader, converter, args)
+        model.train()
 
-                if (current_score >= best_score):
-                    score_descent = 0
+        if (current_score >= best_score):
+            score_descent = 0
 
-                    best_score = current_score
-                    torch.save(model.state_dict(), f"./trained_model/{args.model}_bestmodel.pth")
-                else:
-                    score_descent += 1
+            best_score = current_score
+            torch.save(
+                model.state_dict(),
+                f"./trained_model/{args.model}_supervised.pth",
+            )
+        else:
+            score_descent += 1
 
-                # log
-                lr = optimizer.param_groups[0]["lr"]
-                valid_log = f"\nValidation at {iteration}/{total_iter}:\n"
-                valid_log += f"Train_loss: {train_loss_avg.val():0.3f}, Valid_loss: {valid_loss:0.3f}, "
-                valid_log += f"Current_lr: {lr:0.7f}, "
-                valid_log += f"Current_score: {current_score:0.2f}, Best_score: {best_score:0.2f}, "
-                valid_log += f"Score_descent: {score_descent}\n"
-                print(valid_log)
+        # log
+        lr = optimizer.param_groups[0]["lr"]
+        valid_log = f"\n\nEpoch {epoch + 1}/{args.epochs}:\n"
+        valid_log += f"Train_loss: {train_loss_avg.val():0.3f}, Valid_loss: {valid_loss:0.3f}, "
+        valid_log += f"Current_lr: {lr:0.7f},\n"
+        valid_log += f"Current_score: {current_score:0.2f}, Best_score: {best_score:0.2f}, "
+        valid_log += f"Score_descent: {score_descent}\n"
+        print(valid_log)
 
-                log += valid_log
+        log += valid_log
 
-                log += "-" * 80 +"\n"
+        log += "-" * 80 +"\n"
 
-                train_loss_avg.reset()
+        train_loss_avg.reset()
+    
+    main_log += log
 
     # free cache
     torch.cuda.empty_cache()
+    
+    # save log
+    print(main_log, file= open(f"log/supervised_learning.txt", "w"))
     
     return
             
@@ -215,7 +231,7 @@ def supervised_learning(args):
 if __name__ == "__main__":
     """ Argument """ 
     parser = argparse.ArgumentParser()
-    config = load_config("config/default.yaml")
+    config = load_config("config/STR.yaml")
     parser.set_defaults(**config)
     
     parser.add_argument(
@@ -255,8 +271,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    args.use_IMAGENET_norm = False  # for CRNN and TRBA
     
     if args.model == "CRNN":  # CRNN = NVBC
         args.Transformation = "None"
@@ -293,4 +307,4 @@ if __name__ == "__main__":
         f"Command line input: CUDA_VISIBLE_DEVICES={args.CUDA_VISIBLE_DEVICES} python {command_line_input}"
     )
 
-    supervised_learning(args)
+    main(args)

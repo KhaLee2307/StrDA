@@ -2,9 +2,9 @@ import os
 import sys
 import random
 import argparse
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 from PIL import ImageFile
 
 import torch
@@ -28,67 +28,93 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 def main(args):
     dashed_line = "-" * 80
     
+    print(dashed_line)
+    # load source data
+    print("Load source domain data...")
+    source_data_raw, _ = hierarchical_dataset(args.source_data, args, mode="raw")
+    source_data = Pseudolabel_Dataset(source_data_raw, np.full(len(source_data_raw), 0))
+    
+    del source_data_raw
+    
+    print(dashed_line)
     # load target data (raw)
-    target_data, _ = hierarchical_dataset(args.target_data, args, mode = "raw")
+    print("Load target domain data...")
+    target_data_raw, _ = hierarchical_dataset(args.target_data, args, mode="raw")
 
-    select_data = list(np.load(args.select_data))
+    try:
+        select_data = list(np.load(args.select_data))
+    except:
+        print("\n [*][WARNING] NO available select_data!")
+        print(" [*][WARNING] You are using all target domain data!\n")
+        select_data = list(range(len(target_data_raw)))
     
     # setup Domain Discriminator (DD)
+    args.saved_path = f"stratify/{args.method}/{args.discriminator}"
     discrimination = DomainStratifying(args, select_data)
-
-    # load target data
-    target_data_adjust_raw = Subset(target_data, select_data)
-    target_data_adjust = Pseudolabel_Dataset(target_data_adjust_raw, np.full(len(target_data_adjust_raw), 1))
-
-    print(dashed_line)
-
-    # load source data
-    source_data_raw, _ = hierarchical_dataset(args.source_data, args, mode = "raw")
-    source_data = Pseudolabel_Dataset(source_data_raw, np.full(len(source_data_raw), 0)) 
-
-    del target_data_adjust_raw, source_data_raw
 
     print(dashed_line)
     
     # setup model
+    print("Init model")
     model = BaselineClassifier(args)
 
     # load pretrained model (baseline)
     pretrained_state_dict = torch.load(args.saved_model)
-    state_dict = model.state_dict()
-    for key in list(state_dict.keys()):
-        if (("module." + key) in pretrained_state_dict.keys()):
-            state_dict[key] = pretrained_state_dict["module." + key].data
-        # else:
-        #     print(key)
-    model.load_state_dict(state_dict)
+    
+    try:
+        model.load_state_dict(
+            pretrained_state_dict
+        )
+    except:
+        print("\n [*][WARNING] The pre-trained weights do not match the model! Carefully check!\n")
+        state_dict = model.state_dict()
+        for key in list(state_dict.keys()):
+            if (("module." + key) in pretrained_state_dict.keys()):
+                state_dict[key] = pretrained_state_dict["module." + key].data
+            # else:
+            #     print(key)
+        model.load_state_dict(state_dict)
+    
+    print(f"Load pretrained model from {args.saved_model}")
 
     model = model.to(device)
-    model.train()
     # print(model.state_dict())
 
-    filtered_parameters = []
-    params_num = []
-    for p in filter(lambda p: p.requires_grad, model.parameters()):
-        filtered_parameters.append(p)
-        params_num.append(np.prod(p.size()))
-    print(f"Trainable params num: {sum(params_num)}")
+    # training part
+    if (args.train == True):
+        filtered_parameters = []
+        params_num = []
+        for p in filter(lambda p: p.requires_grad, model.parameters()):
+            filtered_parameters.append(p)
+            params_num.append(np.prod(p.size()))
+        print(f"Trainable params num: {sum(params_num)}")
+    
+        print(dashed_line)
+        
+        # setup loss (not contain sigmoid function)
+        criterion = FocalLoss().to(device)
 
-    # setup loss (not contain sigmoid function)
-    criterion = FocalLoss().to(device)
+        # load target data adjust (use select data)
+        target_data_adjust_raw = Subset(target_data_raw, select_data)
+        target_data_adjust = Pseudolabel_Dataset(target_data_adjust_raw, np.full(len(target_data_adjust_raw), 1))
+        
+        del target_data_adjust_raw
+        
+        # get dataloader
+        if args.aug == True:
+            source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True, mode="adapt")
+        else:
+            source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True)
+            
+        if args.aug == True:
+            target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True, mode="adapt")
+        else:
+            target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True)
 
-    # get dataloader
-    source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True)
-    target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True)
+        # set up iter dataloader
+        source_loader_iter = iter(source_loader)
 
-    # set up iter dataloader
-    source_loader_iter = iter(source_loader)
-
-    del source_data, target_data_adjust
-
-    # start training
-    if (args.infer == False):
-        model.train()
+        del source_data, target_data_adjust
 
         # set up optimizer
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -105,9 +131,13 @@ def main(args):
         
         # train
         train_loss_avg = Averager()
+        
+        print(dashed_line)
+        print("Start Training Domain Discriminator (DD)...\n")
 
         for epoch in range(args.epochs):
 
+            model.train()
             for batch in tqdm(target_loader):
                 
                 images_target_tensor, labels_target = batch
@@ -136,22 +166,33 @@ def main(args):
                 scheduler.step()
 
             lr = optimizer.param_groups[0]["lr"]
-            valid_log = f"\nEpoch: {epoch + 1}/{args.epochs}: "
+            valid_log = f"\nEpoch {epoch + 1}/{args.epochs}:\n"
             valid_log += f"Train_loss: {train_loss_avg.val():0.5f}, Current_lr: {lr:0.7f}\n"
             print(valid_log)
             train_loss_avg.reset()
 
             torch.save(
                 model.state_dict(),
-                f"stratify/{args.method}/discriminator.pth"
+                f"{args.saved_path}/DD_{args.discriminator}_discriminator.pth",
             )   
-            
-        model.eval()
+        del source_loader_iter, source_loader, target_loader
     
-    del source_loader_iter, source_loader, target_loader
+    print(dashed_line)
+    
+    try:
+        model.load_state_dict(
+            torch.load(f"{args.saved_path}/DD_{args.discriminator}_discriminator.pth")
+        )
+        print(f"Load model from {args.saved_path}/DD_{args.discriminator}_discriminator.pth")
+    except:
+        print("\n [*][WARNING] NO checkpoint!")
+        print(" [*][WARNING] You are using the baseline model!")
+        print(" [*][WARNING] You haven't trained the discriminator yet!\n")
+        
+    model.eval()
     
     # Domain Stratifying
-    discrimination.stratify_DD(target_data, model)
+    discrimination.stratify_DD(target_data_raw, model)
     
     print(dashed_line)
         
@@ -159,7 +200,7 @@ def main(args):
 if __name__ == "__main__":
     """ Argument """ 
     parser = argparse.ArgumentParser()
-    config = load_config("config/default.yaml")
+    config = load_config("config/DD.yaml")
     parser.set_defaults(**config)
     
     parser.add_argument(
@@ -171,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--select_data",
         required=True,
-        help="path to select data",
+        help="path to select data file exp: select_data.npy",
     )
     parser.add_argument(
         "--saved_model",
@@ -195,16 +236,16 @@ if __name__ == "__main__":
         help="hyper-parameter n, number of subsets partitioned from target domain data",
     )
     parser.add_argument(
-        "--method", default="DD", help="select Domain Stratifying method, DD|HDGE",
-    )
-    parser.add_argument(
         "--discriminator",
         type=str,
         required=True,
         help="choose discriminator, CRNN|TRBA",
     )
     parser.add_argument(
-        "--infer", action="store_true", default=False, help="inference or not",
+        "--train", action="store_true", default=False, help="training or not",
+    )
+    parser.add_argument(
+        "--aug", action="store_true", default=False, help="augmentation or not",
     )
 
     args = parser.parse_args()

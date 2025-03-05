@@ -1,8 +1,8 @@
 import os
 import itertools
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 
 import torch
 from torch import nn
@@ -29,7 +29,7 @@ class HDGE(object):
         self.Da = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
         self.Db = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
 
-        utils.print_networks([self.Gab,self.Gba,self.Da,self.Db], ['Gab','Gba','Da','Db'])
+        utils.print_networks([self.Gab,self.Gba,self.Da,self.Db], ["Gab","Gba","Da","Db"])
 
         # define Loss criterias
         self.MSE = nn.MSELoss()
@@ -44,28 +44,39 @@ class HDGE(object):
         self.d_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.d_optimizer, lr_lambda=utils.LambdaLR(args.epochs, 0, args.decay_epoch).step)
 
         # try loading checkpoint
-        if not os.path.isdir(args.checkpoint_dir):
-            os.makedirs(args.checkpoint_dir)
+        os.makedirs(args.checkpoint_dir, exist_ok=True)
 
         try:
-            ckpt = utils.load_checkpoint('%s/HDGE_gen_dis.ckpt' % (args.checkpoint_dir))
-            self.start_epoch = ckpt['epoch']
-            self.Da.load_state_dict(ckpt['Da'])
-            self.Db.load_state_dict(ckpt['Db'])
-            self.Gab.load_state_dict(ckpt['Gab'])
-            self.Gba.load_state_dict(ckpt['Gba'])
-            self.d_optimizer.load_state_dict(ckpt['d_optimizer'])
-            self.g_optimizer.load_state_dict(ckpt['g_optimizer'])
+            ckpt = utils.load_checkpoint("%s/HDGE_gen_dis.ckpt" % (args.checkpoint_dir))
+            self.start_epoch = ckpt["epoch"]
+            self.Da.load_state_dict(ckpt["Da"])
+            self.Db.load_state_dict(ckpt["Db"])
+            self.Gab.load_state_dict(ckpt["Gab"])
+            self.Gba.load_state_dict(ckpt["Gba"])
+            self.d_optimizer.load_state_dict(ckpt["d_optimizer"])
+            self.g_optimizer.load_state_dict(ckpt["g_optimizer"])
         except:
-            print(' [*] No checkpoint!')
+            print(" [*] No checkpoint!")
             self.start_epoch = 0
 
     def train(self,args):
+        dashed_line = "-" * 80
 
+        print(dashed_line)
+        print("Load source domain data...")
         source_data, source_data_log = hierarchical_dataset(args.source_data, args, mode = "raw")
+        
+        print(dashed_line)
+        print("Load target domain data...")
         target_data, target_data_log = hierarchical_dataset(args.target_data, args, mode = "raw")
 
-        select_data = list(np.load(args.select_data))
+        try:
+            select_data = list(np.load(args.select_data))
+        except:
+            print("\n [*][WARNING] NO available select_data!")
+            print(" [*][WARNING] You are using all target domain data!\n")
+            select_data = list(range(len(target_data)))
+
         target_data_adjust = Subset(target_data, select_data)
 
         myAlignCollate = AlignCollateHDGE(args)
@@ -96,6 +107,9 @@ class HDGE(object):
 
         a_loader_iter = iter(a_loader)
 
+        print(dashed_line)
+        print("Start Training Harmonic Domain Gap Estimator (HDGE)...\n")
+        
         for epoch in range(self.start_epoch, args.epochs):
 
             for b_real in tqdm(b_loader):
@@ -108,7 +122,6 @@ class HDGE(object):
                     a_real = next(a_loader_iter)
 
                 # generator Computations
-
                 set_grad([self.Da, self.Db], False)
                 self.g_optimizer.zero_grad()
 
@@ -151,7 +164,6 @@ class HDGE(object):
                 self.g_optimizer.step()
 
                 # discriminator Computations
-
                 set_grad([self.Da, self.Db], True)
                 self.d_optimizer.zero_grad()
 
@@ -183,18 +195,17 @@ class HDGE(object):
                 b_dis_loss.backward()
                 self.d_optimizer.step()
 
-            print("\nEpoch: (%3d/%3d) | Gen Loss: %0.4f | Dis Loss: %0.4f\n" % 
-                    (epoch + 1, args.epochs, gen_loss,a_dis_loss+b_dis_loss))
+            print(f"\nEpoch ({epoch+1}/{args.epochs}) | Gen Loss: %0.4f | Dis Loss: %0.4f\n" % (gen_loss,a_dis_loss+b_dis_loss))
 
             # override the latest checkpoint
-            utils.save_checkpoint({'epoch': epoch + 1,
-                                   'Da': self.Da.state_dict(),
-                                   'Db': self.Db.state_dict(),
-                                   'Gab': self.Gab.state_dict(),
-                                   'Gba': self.Gba.state_dict(),
-                                   'd_optimizer': self.d_optimizer.state_dict(),
-                                   'g_optimizer': self.g_optimizer.state_dict()},
-                                  '%s/latest.ckpt' % (args.checkpoint_dir))
+            utils.save_checkpoint({"epoch": epoch + 1,
+                                   "Da": self.Da.state_dict(),
+                                   "Db": self.Db.state_dict(),
+                                   "Gab": self.Gab.state_dict(),
+                                   "Gba": self.Gba.state_dict(),
+                                   "d_optimizer": self.d_optimizer.state_dict(),
+                                   "g_optimizer": self.g_optimizer.state_dict()},
+                                  "%s/HDGE_gen_dis.ckpt" % (args.checkpoint_dir))
 
             # update learning rates
             self.g_lr_scheduler.step()

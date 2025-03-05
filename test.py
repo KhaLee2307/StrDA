@@ -4,9 +4,9 @@ import sys
 import time
 import random
 import argparse
+from tqdm import tqdm
 
 import numpy as np
-from tqdm import tqdm
 from PIL import ImageFile
 
 import torch
@@ -94,16 +94,17 @@ def benchmark_all_eval(model, criterion, converter, args):
     total_accuracy = total_correct_number / total_eval_data_number
     params_num = sum([np.prod(p.size()) for p in model.parameters()])
 
-    eval_log = "accuracy: "
+    eval_log = "Accuracy:\n"
     for name, accuracy in zip(eval_data_list, accuracy_list):
-        eval_log += f"{name}: {accuracy}\t"
-    eval_log += f"total_accuracy: {total_accuracy:0.2f}\t"
-    eval_log += f"averaged_infer_time: {averaged_forward_time:0.3f}\t# parameters: {params_num/1e6:0.2f}"
+        eval_log += f"{name}: {accuracy} | "
+    eval_log += f"\nTotal_accuracy: {total_accuracy:0.2f}\t"
+    eval_log += f"Averaged_infer_time: {averaged_forward_time:0.3f}\t# parameters: {params_num/1e6:0.2f}"
     print(eval_log)
 
     # for convenience
+    print()
     print("\t".join(accuracy_list))
-    print(f"Total_accuracy:{total_accuracy:0.2f}")
+    print(f"Total_accuracy: {total_accuracy:0.2f}")
 
     return total_accuracy, eval_data_list, accuracy_list
 
@@ -259,11 +260,11 @@ def test(args):
     # load model
     print("loading pretrained model from %s" % args.saved_model)
     try:
-        model.load_state_dict(torch.load(args.saved_model, map_location=device))
-    except:
-        print(
-            "*** pretrained model not match strictly *** and thus load_state_dict with strict=False mode"
+        model.load_state_dict(
+            torch.load(args.saved_model, map_location=device)
         )
+    except:
+        print("\n [*][WARNING] The pre-trained weights do not match the model! Carefully check!\n")
         # pretrained_state_dict = torch.load(args.saved_model)
         # for name in pretrained_state_dict:
         #     print(name)
@@ -290,7 +291,7 @@ def test(args):
 if __name__ == "__main__":
     """ Argument """
     parser = argparse.ArgumentParser()
-    config = load_config("config/default.yaml")
+    config = load_config("config/STR.yaml")
     parser.set_defaults(**config)
 
     parser.add_argument(

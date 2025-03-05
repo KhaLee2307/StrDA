@@ -167,11 +167,11 @@ class Augmentor(object):
         assert 1 <= m <= 10
         self.n = n
         self.m = m
-        assert augment_type in ['channel', 'spatial'
-                                ], 'not augment type name %s' % augment_type
-        if augment_type == 'spatial':
+        assert augment_type in ["channel", "spatial"
+                                ], "not augment type name %s" % augment_type
+        if augment_type == "spatial":
             self.augment_pool = spatial_augment_pool()
-        elif augment_type == 'channel':
+        elif augment_type == "channel":
             self.augment_pool = channel_augment_pool()
 
     def __call__(self, img, prob=0.5):

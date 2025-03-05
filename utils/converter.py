@@ -12,19 +12,19 @@ class CTCLabelConverter(object):
             "[PAD]",
             "[UNK]",
             " ",
-        ]  # [UNK] for unknown character, ' ' for space.
+        ]  # [UNK] for unknown character, " " for space.
         list_character = list(character)
         dict_character = list_special_token + list_character
 
         self.dict = {}
         for i, char in enumerate(dict_character):
-            # NOTE: 0 is reserved for 'CTCblank' token required by CTCLoss, not same with space ' '.
+            # NOTE: 0 is reserved for "CTCblank" token required by CTCLoss, not same with space " ".
             # print(i, char)
             self.dict[char] = i + 1
 
         self.character = [
             "[CTCblank]"
-        ] + dict_character  # dummy '[CTCblank]' token for CTCLoss (index 0).
+        ] + dict_character  # dummy "[CTCblank]" token for CTCLoss (index 0).
         print(f"# of tokens and characters: {len(self.character)}")
 
     def encode(self, word_string, batch_max_length=25):
@@ -83,7 +83,7 @@ class AttnLabelConverter(object):
             "[SOS]",
             "[EOS]",
             " ",
-        ]  # [UNK] for unknown character, ' ' for space.
+        ]  # [UNK] for unknown character, " " for space.
         list_character = list(character)
         self.character = list_special_token + list_character
 
