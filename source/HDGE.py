@@ -39,13 +39,13 @@ class HDGE(object):
         self.g_optimizer = torch.optim.Adam(itertools.chain(self.Gab.parameters(),self.Gba.parameters()), lr=args.lr, betas=(0.5, 0.999))
         self.d_optimizer = torch.optim.Adam(itertools.chain(self.Da.parameters(),self.Db.parameters()), lr=args.lr, betas=(0.5, 0.999))
         
-
         self.g_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.g_optimizer, lr_lambda=utils.LambdaLR(args.epochs, 0, args.decay_epoch).step)
         self.d_lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.d_optimizer, lr_lambda=utils.LambdaLR(args.epochs, 0, args.decay_epoch).step)
 
-        # try loading checkpoint
+        # to make directories for saving checkpoints
         os.makedirs(args.checkpoint_dir, exist_ok=True)
 
+        # try loading checkpoint
         try:
             ckpt = utils.load_checkpoint("%s/HDGE_gen_dis.ckpt" % (args.checkpoint_dir))
             self.start_epoch = ckpt["epoch"]
@@ -62,14 +62,18 @@ class HDGE(object):
     def train(self,args):
         dashed_line = "-" * 80
 
+        # load source domain data (raw)
         print(dashed_line)
         print("Load source domain data...")
         source_data, source_data_log = hierarchical_dataset(args.source_data, args, mode = "raw")
+        print(source_data_log, end="")
         
+        # load target domain data (raw)
         print(dashed_line)
         print("Load target domain data...")
         target_data, target_data_log = hierarchical_dataset(args.target_data, args, mode = "raw")
-
+        print(target_data_log, end="")
+        
         try:
             select_data = list(np.load(args.select_data))
         except:
@@ -99,9 +103,7 @@ class HDGE(object):
             pin_memory=False,
             drop_last=True,
         )
-
-        del source_data, target_data, select_data, target_data_adjust, source_data_log, target_data_log, myAlignCollate
-
+        
         a_fake_sample = utils.Sample_from_Pool()
         b_fake_sample = utils.Sample_from_Pool()
 

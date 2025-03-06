@@ -52,9 +52,8 @@ def get_dataloader(args, dataset, batch_size, shuffle = False, mode = "label"):
 def hierarchical_dataset(root, args, mode="label", drop_data=[]):
     """ select_data="/" contains all sub-directory of root directory """
     dataset_list = []
-    dataset_log = f"dataset_root:    {root}\t dataset:"
-    print(dataset_log)
-    dataset_log += "\n"
+    dataset_log = f"dataset_root:    {root}\t dataset:\n"
+    # print(dataset_log)
 
     listdir = list()
     for dirpath, dirnames, filenames in os.walk(root + "/"):
@@ -78,7 +77,7 @@ def hierarchical_dataset(root, args, mode="label", drop_data=[]):
             # load data with label
             dataset = LmdbDataset(dirpath, args)
         sub_dataset_log = f"sub-directory:\t/{os.path.relpath(dirpath, root)}\t num samples: {len(dataset)}"
-        print(sub_dataset_log)
+        # print(sub_dataset_log)
         dataset_log += f"{sub_dataset_log}\n"
         dataset_list.append(dataset)
 

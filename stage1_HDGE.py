@@ -27,6 +27,10 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 def main(args):
     dashed_line = "-" * 80
     
+    # to make directories for saving results and trained models
+    args.saved_path = f"stratify/{args.method}/{args.beta}_beta"
+    os.makedirs(f"{args.saved_path}/{args.num_subsets}_subsets/", exist_ok=True)
+    
     str_ids = args.gpu_ids.split(",")
     args.gpu_ids = []
     for str_id in str_ids:
@@ -45,10 +49,11 @@ def main(args):
     print(dashed_line)
     print("Start Inference")
 
-    # load target data (raw)
+    # load target domain data (raw)
     print("Load target domain data for inference...")
-    target_data_raw, _ = hierarchical_dataset(args.target_data, args, mode = "raw")
-
+    target_data_raw, target_data_log = hierarchical_dataset(args.target_data, args, mode = "raw")
+    print(target_data_log, end="")
+    
     try:
         select_data = list(np.load(args.select_data))
     except:
@@ -57,10 +62,6 @@ def main(args):
         select_data = list(range(len(target_data_raw)))
     
     print(dashed_line)
-
-    # setup Harmonic Domain Gap Estimator (HDGE)
-    args.saved_path = f"stratify/{args.method}/{args.beta}"
-    hdge = DomainStratifying(args, select_data)
 
     dis_source = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
     dis_target = define_Dis(input_nc=3, ndf=args.ndf, n_layers_D=3, norm=args.norm, gpu_ids=args.gpu_ids)
@@ -72,16 +73,22 @@ def main(args):
         dis_source.load_state_dict(ckpt["Da"])
         dis_target.load_state_dict(ckpt["Db"])
         
-        # Domain Stratifying
-        hdge.stratify_HDGE(target_data_raw, dis_source, dis_target, args.beta)
+        # Domain Stratifying (Harmonic Domain Gap Estimator - HDGE)
+        HDGE = DomainStratifying(args, select_data)
+        HDGE.stratify_HDGE(target_data_raw, dis_source, dis_target, args.beta)
+        
+        print("\nAll information is saved in " + f"{args.saved_path}/")
+        print("The trained weights are saved at " + f"{args.checkpoint_dir}/HDGE_gen_dis.ckpt")
     
     except:
         print("\n [*][WARNING] STOP Domain Stratifying!")
         print(" [*][WARNING] NO checkpoint!")
         print(" [*][WARNING] Please train the model first!")
         print(" [*][WARNING] Please check the checkpoint directory!\n")
+        raise ValueError("NO checkpoint!")
     
     print(dashed_line)
+    return
 
 
 if __name__ == "__main__":
@@ -102,7 +109,7 @@ if __name__ == "__main__":
         help="path to select data",
     )
     parser.add_argument(
-        "--checkpoint_dir", type=str, default="stratify/HDGE/", help="models are saved here",
+        "--checkpoint_dir", type=str, default="stratify/HDGE", help="models are saved here",
     )
     parser.add_argument(
         "--batch_size", type=int, default=16, help="input batch size",
@@ -130,7 +137,7 @@ if __name__ == "__main__":
         "--beta",
         type=float,
         required=True,
-        help="hyper-parameter beta in HDGE formula",
+        help="hyper-parameter beta in HDGE formula, 0<beta<1",
     )
     parser.add_argument(
         "--train", action="store_true", default=False, help="training or not",

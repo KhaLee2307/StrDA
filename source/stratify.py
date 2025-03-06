@@ -1,4 +1,3 @@
-import os
 from tqdm import tqdm
 
 import numpy as np
@@ -36,15 +35,20 @@ class DomainStratifying(object):
         self.num_subsets = args.num_subsets    # the number of subsets
         self.remain_data = select_data   # the number of remain data after selection steps
         self.k_number = len(select_data) // self.num_subsets    # the number of data point per subset
-        self.distance = [] # the order of data after processing
 
-        # make dir      
-        os.makedirs(f"{self.saved_path}/{self.num_subsets}_subsets/", exist_ok=True)
-
-    def save_subset(self):
+    def save_subset(self, result):
         
-        result_index = [u[0] for u in self.distance]
-        result_distance = [u[1] for u in self.distance]
+        # sort result in ascending order
+        distance = sorted(result, key=lambda x: x[1])
+        
+        print("\n5-lowest distance:")
+        print(distance[:5])
+        
+        print("\n5-highest distance:")
+        print(distance[-5:])
+            
+        result_index = [u[0] for u in distance]
+        result_distance = [u[1] for u in distance]
 
         if self.method == "DD":
             np.save(f"{self.saved_path}/{self.method}_{self.args.discriminator}_distance.npy", result_distance)
@@ -71,8 +75,6 @@ class DomainStratifying(object):
         if (self.num_subsets % 2 != 0):
             result_index = np.array(result_index, dtype=np.int32)
             np.save(f"{self.saved_path}/{self.num_subsets}_subsets/subset_{self.num_subsets // 2 + 1}.npy", result_index)
-
-        print("\nAll information saved at " + f"{self.saved_path}/{self.num_subsets}_subsets/")
             
     def stratify_DD(self, adapt_data_raw, model):
         """
@@ -111,18 +113,10 @@ class DomainStratifying(object):
 
                 result.extend(list(zip(index_unlabel, preds_prob)))
 
-            # sort result by probability in ascending order
+            # sort result in ascending order
             result = sorted(result, key=lambda x: x[1])
 
-            print("\n20-lowest distance:")
-            print(result[:20])
-            
-            print("\n20-highest distance:")
-            print(result[-20:])
-
-            self.distance = result
-
-        self.save_subset()
+        self.save_subset(result)
 
     def stratify_HDGE(self, adapt_data_raw, dis_source, dis_target, beta):
         """
@@ -195,15 +189,5 @@ class DomainStratifying(object):
         distance = [formula(s_loss, t_loss, beta) for s_loss, t_loss in zip(source_loss, target_loss)]
 
         result = [[index, distance] for index, distance in zip(self.remain_data, distance)]
-        # sort result in ascending order
-        result = sorted(result, key=lambda x: x[1])
-
-        self.distance = result
-
-        print("\n20-lowest distance:")
-        print(result[:20])
         
-        print("\n20-highest distance:")
-        print(result[-20:])
-
-        self.save_subset()
+        self.save_subset(result)

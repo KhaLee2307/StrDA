@@ -28,33 +28,42 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 def main(args):
     dashed_line = "-" * 80
     main_log = ""
-    args_log = dashed_line + "\n"
     
-    """ Dataset preparation """
-    # source domain data
+    # to make directories for saving model and log files if not exist
+    os.makedirs("trained_model/", exist_ok=True)
+    os.makedirs("log/", exist_ok=True)
+    
+    # load source domain data for supervised learning
     print(dashed_line)
+    main_log = dashed_line + "\n"
     print("Load training data (source domain)...")
+    main_log += "Load training data (source domain)...\n"
+    
     train_data, train_data_log = hierarchical_dataset(args.train_data, args)
     if args.aug:
         train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True, mode="supervised")
     else:
         train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True)
     
-    args_log += train_data_log
+    print(train_data_log, end="")
+    main_log += train_data_log
 
-    # validation data
+    # load validation data
     print(dashed_line)
+    main_log += dashed_line + "\n"
     print("Load validation data...")
+    main_log += "Load validation data...\n"
+
     valid_data, valid_data_log = hierarchical_dataset(args.valid_data, args)
     valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle=False) # "True" to check training progress with validation function.
     
-    args_log += valid_data_log
-
-    del train_data, valid_data, train_data_log, valid_data_log
+    print(valid_data_log, end="")
+    main_log += valid_data_log
     
     print(dashed_line)
+    main_log += dashed_line + "\n"
     print("Init model")
-    args_log += "Init model\n"
+    main_log += "Init model\n"
 
     """ Model configuration """
     if args.Prediction == "CTC":
@@ -78,14 +87,12 @@ def main(args):
         model.load_state_dict(pretrained)
         torch.save(
             pretrained,
-            f"./trained_model/{args.model}_supervised.pth",
+            f"trained_model/{args.model}_supervised.pth",
         )
         print(f"Load pretrained model from {args.saved_model}")
-        args_log += "Load pretrained model\n"
+        main_log += "Load pretrained model\n"
 
-        del pretrained
-
-    """ Setup loss """
+    # setup loss
     if args.Prediction == "CTC":
         criterion = torch.nn.CTCLoss(zero_infinity=True).to(device)
     else:
@@ -99,28 +106,23 @@ def main(args):
         filtered_parameters.append(p)
         params_num.append(np.prod(p.size()))
     print(f"Trainable params num: {sum(params_num)}")
-    args_log += f"Trainable params num: {sum(params_num)}"
-
-    del params_num
+    main_log += f"Trainable params num: {sum(params_num)}\n"
 
     """ Final options """
     print("------------ Options -------------")
-    args_log += "------------ Options -------------\n"
+    main_log += "------------ Options -------------\n"
     opt = vars(args)
     for k, v in opt.items():
         if str(k) == "character" and len(str(v)) > 500:
             print(f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}")
-            args_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
+            main_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
         else:
             print(f"{str(k)}: {str(v)}")
-            args_log += f"{str(k)}: {str(v)}\n"
+            main_log += f"{str(k)}: {str(v)}\n"
     print(dashed_line)
-    args_log += "---------------------------------------\n"
-    main_log += args_log
+    main_log += dashed_line + "\n"
     print("Start Supervised Learning (Scene Text Recognition - STR)...\n")
     main_log += "Start Supervised Learning (Scene Text Recognition - STR)...\n"
-
-    total_iter = (args.epochs * len(train_loader))
 
     # set up optimizer
     optimizer = torch.optim.AdamW(filtered_parameters, lr=args.lr, weight_decay=args.weight_decay)
@@ -132,17 +134,15 @@ def main(args):
                 cycle_momentum=False,
                 div_factor=20,
                 final_div_factor=1000,
-                total_steps=total_iter,
+                total_steps=(args.epochs * len(train_loader)),
             )
     
     train_loss_avg = Averager()
     best_score = float("-inf")
     score_descent = 0
 
-    log = ""
-
     # training loop
-    for epoch in tqdm(range(args.epochs)):
+    for epoch in range(args.epochs):
 
         # training part
         model.train()
@@ -197,33 +197,37 @@ def main(args):
             best_score = current_score
             torch.save(
                 model.state_dict(),
-                f"./trained_model/{args.model}_supervised.pth",
+                f"trained_model/{args.model}_supervised.pth",
             )
         else:
             score_descent += 1
 
         # log
         lr = optimizer.param_groups[0]["lr"]
-        valid_log = f"\n\nEpoch {epoch + 1}/{args.epochs}:\n"
+        valid_log = f"\nEpoch {epoch + 1}/{args.epochs}:\n"
         valid_log += f"Train_loss: {train_loss_avg.val():0.3f}, Valid_loss: {valid_loss:0.3f}, "
         valid_log += f"Current_lr: {lr:0.7f},\n"
         valid_log += f"Current_score: {current_score:0.2f}, Best_score: {best_score:0.2f}, "
         valid_log += f"Score_descent: {score_descent}\n"
         print(valid_log)
 
-        log += valid_log
+        main_log += valid_log
 
-        log += "-" * 80 +"\n"
+        main_log += dashed_line + "\n"
 
         train_loss_avg.reset()
     
-    main_log += log
-
     # free cache
     torch.cuda.empty_cache()
     
     # save log
+    print("Training is done!")
+    main_log += "Training is done!"
     print(main_log, file= open(f"log/supervised_learning.txt", "w"))
+    
+    print(f"Model is saved at trained_model/{args.model}_supervised.pth")
+    print("All information is saved at log/supervised_learning.txt")
+    print(dashed_line)
     
     return
             

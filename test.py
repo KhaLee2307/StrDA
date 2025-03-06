@@ -71,6 +71,7 @@ def benchmark_all_eval(model, criterion, converter, args):
         eval_data, eval_data_log = hierarchical_dataset(
             root=eval_data_path, args=args
         )
+        print(eval_data_log)
         eval_loader = torch.utils.data.DataLoader(
             eval_data,
             batch_size=args.batch_size_val,

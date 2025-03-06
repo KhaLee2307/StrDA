@@ -28,29 +28,29 @@ torch.multiprocessing.set_sharing_strategy("file_system")
 def main(args):
     dashed_line = "-" * 80
     
+    # to make directories for saving models and files if not exist
+    args.saved_path = f"stratify/{args.method}/{args.discriminator}"
+    os.makedirs(f"{args.saved_path}/{args.num_subsets}_subsets/", exist_ok=True)
+    
     print(dashed_line)
-    # load source data
+    # load source domain data (raw)
     print("Load source domain data...")
-    source_data_raw, _ = hierarchical_dataset(args.source_data, args, mode="raw")
+    source_data_raw, source_data_log = hierarchical_dataset(args.source_data, args, mode="raw")
     source_data = Pseudolabel_Dataset(source_data_raw, np.full(len(source_data_raw), 0))
-    
-    del source_data_raw
-    
+    print(source_data_log, end="")
+        
     print(dashed_line)
-    # load target data (raw)
+    # load target domain data (raw)
     print("Load target domain data...")
-    target_data_raw, _ = hierarchical_dataset(args.target_data, args, mode="raw")
-
+    target_data_raw, target_data_log = hierarchical_dataset(args.target_data, args, mode="raw")
+    print(target_data_log, end="")
+    
     try:
         select_data = list(np.load(args.select_data))
     except:
         print("\n [*][WARNING] NO available select_data!")
         print(" [*][WARNING] You are using all target domain data!\n")
         select_data = list(range(len(target_data_raw)))
-    
-    # setup Domain Discriminator (DD)
-    args.saved_path = f"stratify/{args.method}/{args.discriminator}"
-    discrimination = DomainStratifying(args, select_data)
 
     print(dashed_line)
     
@@ -97,9 +97,7 @@ def main(args):
         # load target data adjust (use select data)
         target_data_adjust_raw = Subset(target_data_raw, select_data)
         target_data_adjust = Pseudolabel_Dataset(target_data_adjust_raw, np.full(len(target_data_adjust_raw), 1))
-        
-        del target_data_adjust_raw
-        
+                
         # get dataloader
         if args.aug == True:
             source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True, mode="adapt")
@@ -113,8 +111,6 @@ def main(args):
 
         # set up iter dataloader
         source_loader_iter = iter(source_loader)
-
-        del source_data, target_data_adjust
 
         # set up optimizer
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -175,7 +171,6 @@ def main(args):
                 model.state_dict(),
                 f"{args.saved_path}/DD_{args.discriminator}_discriminator.pth",
             )   
-        del source_loader_iter, source_loader, target_loader
     
     print(dashed_line)
     
@@ -191,10 +186,15 @@ def main(args):
         
     model.eval()
     
-    # Domain Stratifying
-    discrimination.stratify_DD(target_data_raw, model)
+    # Domain Stratifying (Domain Discriminator - DD)
+    DD = DomainStratifying(args, select_data)
+    DD.stratify_DD(target_data_raw, model)
     
+    print("\nAll information is saved in " + f"{args.saved_path}/")
+    print("The trained weights are saved at " + f"{args.saved_path}/DD_{args.discriminator}_discriminator.pth")
     print(dashed_line)
+    
+    return
         
 
 if __name__ == "__main__":
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--saved_model",
         required=True,
-        help="path to pretrained model",
+        help="path to pretrained model (backbone model)",
     )
     parser.add_argument(
         "--batch_size", type=int, default=128, help="input batch size",

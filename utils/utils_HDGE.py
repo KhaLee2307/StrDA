@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 
-# to make directories 
+# to make directories
 def mkdir(paths):
     for path in paths:
         os.makedirs(path, exist_ok=True)
@@ -35,7 +35,7 @@ def get_testdata_link(dataset_dir):
     return dirs
 
 
-# to save the checkpoint 
+# to save the checkpoint
 def save_checkpoint(state, save_path):
     torch.save(state, save_path)
 
