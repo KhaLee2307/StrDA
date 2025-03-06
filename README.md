@@ -1,12 +1,18 @@
 <div align="center">
   <h1>Stratified Domain Adaptation: A Progressive Self-Training Approach for Scene Text Recognition</h1>
-  <h3>WACV 2025 Early Acceptance (Round 1)</h3>
   <a href="https://openaccess.thecvf.com/content/WACV2025/html/Le_Stratified_Domain_Adaptation_A_Progressive_Self-Training_Approach_for_Scene_Text_WACV_2025_paper.html">[📰 Paper]</a>
   <a href="WACV2025/wacv25-1278-poster.pdf">[🖼️ Poster]</a>
   <a href="WACV2025/wacv25-1278-slides.pdf">[📚 Slides]</a>
   <br>
+  <h3>WACV 2025 Early Acceptance (Round 1)</h3>
   <img src="https://wacv2025.thecvf.com/wp-content/uploads/2024/06/WACV-2025-Logo_Color-1024x315.png" width="400" alt="WACV 2025 Logo">
 </div>
+
+## Introduction
+This is the official PyTorch implementation of the [StrDA paper](https://openaccess.thecvf.com/content/WACV2025/html/Le_Stratified_Domain_Adaptation_A_Progressive_Self-Training_Approach_for_Scene_Text_WACV_2025_paper.html), which was accepted at the main conference of the ***IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) 2025***.
+
+In this paper, we propose the Stratified Domain Adaptation (StrDA) approach, a progressive self-training framework for scene text recognition. By leveraging the gradual escalation of the domain gap with the Harmonic Domain Gap Estimator ($\mathrm{HDGE}$), we propose partitioning the target domain into a sequence of ordered subsets to progressively reduce the domain gap between each and the source domain. Progressive self-training is then applied sequentially to these subsets. Extensive experiments on STR benchmarks demonstrate that our approach enables the baseline STR models to progressively adapt to the target domain. This approach significantly improves the performance of the baseline model without using any human-annotated data and shows its superior effectiveness compared to existing UDA methods for the scene text recognition task.
+* **Keywords:** scene text recognition (STR), unsupervised domain adaptation (UDA), self-training (ST), optical character recognition (OCR)
 
 ## News 🚀🚀🚀
 - `2025/03/03`: 💻 We have released the implementation of StrDA for TRBA and CRNN.
