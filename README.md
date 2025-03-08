@@ -11,11 +11,12 @@
 ## Introduction
 This is the official PyTorch implementation of the [StrDA paper](https://openaccess.thecvf.com/content/WACV2025/html/Le_Stratified_Domain_Adaptation_A_Progressive_Self-Training_Approach_for_Scene_Text_WACV_2025_paper.html), which was accepted at the main conference of the ***IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) 2025***.
 
-In this paper, we propose the Stratified Domain Adaptation (StrDA) approach, a progressive self-training framework for scene text recognition. By leveraging the gradual escalation of the domain gap with the **Harmonic Domain Gap Estimator ($\mathrm{HDGE}$)**, we propose partitioning the target domain into a sequence of ordered subsets to progressively reduce the domain gap between each and the source domain. Progressive self-training is then applied sequentially to these subsets. Extensive experiments on STR benchmarks demonstrate that our approach enables the baseline STR models to progressively adapt to the target domain. This approach significantly improves the performance of the baseline model without using any human-annotated data and shows its superior effectiveness compared to existing UDA methods for the scene text recognition task.
+**Unsupervised domain adaptation (UDA)** has become increasingly prevalent in **scene text recognition (STR)** especially where training and testing data reside in different domains. The efficacy of existing UDA approaches tends to **degrade** when there is a **large gap** between the source and target domains. To deal with this problem **gradually shifting** or **progressively learning** to shift from domain to domain is the key issue. In this paper we introduce the **Stratified Domain Adaptation (StrDA)** approach which examines the **gradual escalation** of the **domain gap** for the learning process. The objective is to partition the target data into subsets so that the progressively self-trained model can adapt to gradual changes. We stratify the target data by evaluating the proximity of each data sample to both the source and target domains. We propose a **novel method** for employing **domain discriminators** to estimate the **out-of-distribution** and **domain discriminative** levels of data samples. Extensive experiments on benchmark scene-text datasets show that our approach **significantly improves** the performance of baseline (source-trained) STR models.
+
 * **Keywords:** scene text recognition (STR), unsupervised domain adaptation (UDA), self-training (ST), optical character recognition (OCR)
 
 ## News 🚀🚀🚀
-- `2025/03/06`: 📜 We have released the instructions for running the code.
+- `2025/03/06`: 📜 We have uploaded the instructions for running the code (include data guide).
 - `2025/03/03`: 💻 We have released the implementation of StrDA for TRBA and CRNN.
 - `2025/02/28`: 🗣️ We attended the conference, you can view the poster and slides [here](WACV2025).
 - `2025/08/30`: 🔥 Our paper has been accepted to [WACV'25](https://wacv2025.thecvf.com/) (Algorithms Track).
@@ -85,7 +86,7 @@ There are 2 main methods with many settings:
 **Broader insight:** You can try this method with different STR models, on various source-target domain pairs (e.g., synthetic-handwritten/art text) and even more complex domain gap problems like medical image segmentation. Additionally, you can replace self-training with more advanced UDA techniques.
 
 ## Reference
-If you find our work useful for your research, please cite it:
+If you find our work useful for your research, please cite it and give us a star⭐!
 ```
 @InProceedings{Le_2025_WACV,
     author    = {Le, Kha Nhat and Nguyen, Hoang-Tuan and Tran, Hung Tien and Ngo, Thanh Duc},
