@@ -210,8 +210,7 @@ def main(args):
         print(valid_log)
 
         main_log += valid_log
-
-        main_log += dashed_line + "\n"
+        main_log += "\n" + dashed_line + "\n"
 
         train_loss_avg.reset()
     
@@ -221,6 +220,7 @@ def main(args):
     # save log
     print("Training is done!")
     main_log += "Training is done!"
+    main_log += f"Model is saved at trained_model/{args.model}_supervised.pth"
     print(main_log, file= open(f"log/{args.model}_supervised.txt", "w"))
     
     print(f"Model is saved at trained_model/{args.model}_supervised.pth")

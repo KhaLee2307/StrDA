@@ -109,8 +109,8 @@ def pseudo_labeling(args, model, converter, target_data, adapting_list, round):
     return list_adapt_data, list_pseudo_data, mean_conf
 
            
-def self_training(args, filtered_parameters, model, criterion, converter, \
-                  source_loader, valid_loader, adapting_loader, mean_conf, round = 0):
+def self_training(args, filtered_parameters, model, criterion, converter, relative_path, \
+                  source_loader, valid_loader, adapting_loader, mean_conf, round=0):
 
     num_iter = (args.total_iter // args.val_interval) // args.num_subsets * args.val_interval
 
@@ -140,7 +140,8 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
     best_score = float("-inf")
     score_descent = 0
 
-    log = ""
+    log = "-" * 80 +"\n"
+    log += "Start Self-Training (Scene Text Recognition - STR)...\n"
 
     model.train()
     # training loop
@@ -163,7 +164,6 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
                     infer_time,
                     length_of_data,
                 ) = validation(model, criterion, valid_loader, converter, args)
-            model.train()
 
             if (current_score >= best_score):
                 score_descent = 0
@@ -171,7 +171,7 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
                 best_score = current_score
                 torch.save(
                     model.state_dict(),
-                    f"trained_model/{args.method}/StrDA_round{round}.pth",
+                    f"trained_model/{relative_path}/{args.model}_round{round}.pth",
                 )
             else:
                 score_descent += 1
@@ -188,19 +188,20 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
 
             log += valid_log
 
-            log += "-" * 80 +"\n"
+            log += "\n" + "-" * 80 +"\n"
 
             train_loss_avg.reset()
             source_loss_avg.reset()
             adapting_loss_avg.reset()
 
         if iteration == num_iter:
-            log += f"Stop training at iteration: {iteration}!\n"
-            print(f"Stop training at iteration: {iteration}!\n")
+            log += f"Stop training at iteration {iteration}!\n"
+            print(f"Stop training at iteration {iteration}!\n")
             break
 
         # training part
-        """ loss of source domain """
+        model.train()
+        """ Loss of labeled data (source domain) """
         try:
             images_source_tensor, labels_source = next(source_loader_iter)
         except StopIteration:
@@ -208,7 +209,7 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
             source_loader_iter = iter(source_loader)
             images_source_tensor, labels_source = next(source_loader_iter)
 
-        images_source = images_source_tensor.to(device)          
+        images_source = images_source_tensor.to(device)
         labels_source_index, labels_source_length = converter.encode(
             labels_source, batch_max_length=args.batch_max_length
         )
@@ -226,27 +227,27 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
                 preds_source.view(-1, preds_source.shape[-1]), target_source.contiguous().view(-1)
             )
 
-        """ loss of semi """
+        """ Loss of pseudo-labeled data (target domain) """
         try:
-            images_unlabel_tensor, labels_adapting = next(adapting_loader_iter)
+            images_adapting_tensor, labels_adapting = next(adapting_loader_iter)
         except StopIteration:
             del adapting_loader_iter
             adapting_loader_iter = iter(adapting_loader)
-            images_unlabel_tensor, labels_adapting = next(adapting_loader_iter)
+            images_adapting_tensor, labels_adapting = next(adapting_loader_iter)
         
-        images_unlabel = images_unlabel_tensor.to(device)
+        images_adapting = images_adapting_tensor.to(device)
         labels_adapting_index, labels_adapting_length = converter.encode(
             labels_adapting, batch_max_length=args.batch_max_length
         )
 
-        batch_unlabel_size = len(labels_adapting)
+        batch_adapting_size = len(labels_adapting)
         if args.Prediction == "CTC":
-            preds_adapting = model(images_unlabel)
-            preds_adapting_size = torch.IntTensor([preds_adapting.size(1)] * batch_unlabel_size)
+            preds_adapting = model(images_adapting)
+            preds_adapting_size = torch.IntTensor([preds_adapting.size(1)] * batch_adapting_size)
             preds_adapting_log_softmax = preds_adapting.log_softmax(2).permute(1, 0, 2)
             loss_adapting = criterion(preds_adapting_log_softmax, labels_adapting_index, preds_adapting_size, labels_adapting_length)
         else:
-            preds_adapting = model(images_unlabel, labels_adapting_index[:, :-1])  # align with Attention.forward
+            preds_adapting = model(images_adapting, labels_adapting_index[:, :-1])  # align with Attention.forward
             target_adapting = labels_adapting_index[:, 1:]  # without [SOS] Symbol
             loss_adapting = criterion(
                 preds_adapting.view(-1, preds_adapting.shape[-1]), target_adapting.contiguous().view(-1)
@@ -272,11 +273,12 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
     # save model
     # torch.save(
     #     model.state_dict(),
-    #     f"trained_model/{args.method}/StrDA_round{round}.pth",
+    #     f"trained_model/{relative_path}/{args.model}_round{round}.pth",
     # )
 
     # save log
-    print(log, file= open(f"log/{args.method}/log_self_training_round{round}.txt", "w"))
+    log += f"Model is saved at trained_model/{relative_path}/{args.model}_round{round}.pth"
+    print(log, file= open(f"log/{relative_path}/log_self_training_round{round}.txt", "w"))
 
     # free cache
     torch.cuda.empty_cache()
@@ -439,28 +441,25 @@ def main(args):
 
         # self-training
         print(dashed_line)
-        print("- Seft-training...")
-        main_log += "\n- Seft-training"
-
-        # adjust mean_conf (round_down)
-        mean_conf = int(mean_conf * 10)
+        print("- Start Self-Training (Scene Text Recognition - STR)...")
+        main_log += "\n- Start Self-Training (Scene Text Recognition - STR)..."
 
         self_training_start = time.time()
         if (round >= args.checkpoint):
-            self_training(args, filtered_parameters, model, criterion, converter, \
+            self_training(args, filtered_parameters, model, criterion, converter, relative_path, \
                         source_loader, valid_loader, adapting_loader, mean_conf, round + 1)
         self_training_end = time.time()
 
         print(f"Processing time: {self_training_end - self_training_start}s")
-        print(f"Saved log for adapting round to: 'log/{args.method}/log_self_training_round{round + 1}.txt'")
-        adapt_log += f"\nProcessing time: {self_training_end - self_training_start}s"
-        adapt_log += f"\nSaved log for adapting round to: 'log/{args.method}/log_self_training_round{round + 1}.txt'"
+        print(f"Model is saved at trained_model/{relative_path}/{args.model}_round{round}.pth")
+        print(f"Saved log for adapting round to: 'log/{relative_path}/log_self_training_round{round + 1}.txt'")
 
+        main_log += f"\nProcessing time: {self_training_end - self_training_start}s"
+        main_log += f"\nModel is saved at trained_model/{relative_path}/{args.model}_round{round}.pth"
+        main_log += f"\nSaved log for adapting round to: 'log/{relative_path}/log_self_training_round{round + 1}.txt'"
         main_log += "\n" + dashed_line + "\n"
 
-        print(dashed_line)
-        print(dashed_line)
-        print(dashed_line)
+        print(dashed_line * 3)
     
     # free cache
     torch.cuda.empty_cache()
@@ -468,7 +467,7 @@ def main(args):
     # save log
     print(main_log, file= open(f"log/{args.method}/log_StrDA.txt", "w"))
     
-    return            
+    return
 
 if __name__ == "__main__":
     """ Argument """
