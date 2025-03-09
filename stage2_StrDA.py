@@ -28,18 +28,19 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 torch.multiprocessing.set_sharing_strategy("file_system")
 
 
-def pseudo_labeling(args, model, converter, target_data, adapt_list, round):
+def pseudo_labeling(args, model, converter, target_data, adapting_list, round):
     """ Make prediction and return them """
 
     # get adapt_data
-    data = Subset(target_data, adapt_list)
-    data = Pseudolabel_Dataset(data, adapt_list)
+    data = Subset(target_data, adapting_list)
+    data = Pseudolabel_Dataset(data, adapting_list)
     dataloader = get_dataloader(args, data, args.batch_size_val, shuffle=False)
     
     model.eval()
     with torch.no_grad():
         list_adapt_data = list()
-        pseudo_adapt = list()
+        list_pseudo_data = list()
+        list_pseudo_label = list()
 
         mean_conf = 0
 
@@ -73,36 +74,39 @@ def pseudo_labeling(args, model, converter, target_data, adapt_list, round):
                     pred = pred[:pred_EOS]  # prune after "end of sentence" token ([s])
                     pred_max_prob = pred_max_prob[:pred_EOS]
                 
-                # calculate confidence score (= multiply of pred_max_prob)
-                if len(pred_max_prob.cumprod(dim=0)) > 0:
-                    confidence_score = pred_max_prob.cumprod(dim=0)[-1].item()
-                else:
-                    confidence_score = 0
-
                 if ( 
                     "[PAD]" in pred 
                     or "[UNK]" in pred 
                     or "[SOS]" in pred 
-                ): 
+                ):
+                    list_pseudo_label.append(pred)
+                    continue
+                
+                # calculate confidence score (= multiply of pred_max_prob)
+                if len(pred_max_prob.cumprod(dim=0)) > 0:
+                    confidence_score = pred_max_prob.cumprod(dim=0)[-1].item()
+                else:
+                    list_pseudo_label.append(pred)
                     continue
 
                 list_adapt_data.append(index)
-                pseudo_adapt.append(pred)
+                list_pseudo_data.append(pred)
 
                 mean_conf += confidence_score
 
     mean_conf /= (len(list_adapt_data))
-    mean_conf = int(mean_conf * 100) / 100
-
+    # adjust mean_conf (round_down)
+    mean_conf = int(mean_conf * 10) / 10
+    
     # save pseudo-labels
     with open(f"stratify/{args.method}/pseudolabel_{round}.txt", "w") as file:
-        for string in pseudo_adapt:
+        for string in list_pseudo_label:
             file.write(string + "\n")
 
     # free cache
     torch.cuda.empty_cache()
                 
-    return list_adapt_data, pseudo_adapt, mean_conf
+    return list_adapt_data, list_pseudo_data, mean_conf
 
            
 def self_training(args, filtered_parameters, model, criterion, converter, \
@@ -248,7 +252,7 @@ def self_training(args, filtered_parameters, model, criterion, converter, \
                 preds_adapting.view(-1, preds_adapting.shape[-1]), target_adapting.contiguous().view(-1)
             )
 
-        loss = (10 - mean_conf) * loss_source + loss_adapting * mean_conf
+        loss = (1 - mean_conf) * loss_source + loss_adapting * mean_conf
 
         model.zero_grad(set_to_none=True)
         loss.backward()
@@ -285,15 +289,15 @@ def main(args):
     if args.method == "HDGE":
         if args.beta == -1:
             raise ValueError("Please set beta value for HDGE method.")
-        relative_path = f"{args.method}/{args.beta}_beta/"
+        relative_path = f"{args.method}/{args.beta}_beta/{args.num_subsets}_subsets"
     else:
         if args.discriminator == "":
             raise ValueError("Please set discriminator for DD method.")
-        relative_path = f"{args.method}/{args.discriminator}/"
+        relative_path = f"{args.method}/{args.discriminator}/{args.num_subsets}_subsets"
     
     # to make directories for saving models and logs if not exist
-    os.makedirs(f"log/{relative_path}/{args.num_subsets}_numsubsets/", exist_ok=True)
-    os.makedirs(f"trained_model/{relative_path}/{args.num_subsets}_numsubsets/", exist_ok=True)
+    os.makedirs(f"log/{relative_path}/", exist_ok=True)
+    os.makedirs(f"trained_model/{relative_path}/", exist_ok=True)
 
     # load source domain data
     print(dashed_line)
@@ -302,21 +306,18 @@ def main(args):
     main_log += "Load source domain data...\n"
     
     source_data, source_data_log = hierarchical_dataset(args.source_data, args)
-    if args.aug:
-        source_loader = get_dataloader(args, source_data, args.batch_size, shuffle = True, mode = "adapt")
-    else:
-        source_loader = get_dataloader(args, source_data, args.batch_size, shuffle = True)
-    
+    source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True, aug=args.aug)
+
     print(source_data_log, end="")
     main_log += source_data_log
     
     # load target domain data (raw)
     print(dashed_line)
-    main_log = dashed_line + "\n"
+    main_log += dashed_line + "\n"
     print("Load target domain data...")
     main_log += "Load target domain data...\n"
     
-    target_data,  target_data_log= hierarchical_dataset(args.target_data, args, mode = "raw")
+    target_data,  target_data_log= hierarchical_dataset(args.target_data, args, mode="raw")
 
     print(target_data_log, end="")
     main_log += target_data_log
@@ -328,7 +329,7 @@ def main(args):
     main_log += "Load validation data...\n"
     
     valid_data, valid_data_log = hierarchical_dataset(args.valid_data, args)
-    valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle = False) # "True" to check training progress with validation function.
+    valid_loader = get_dataloader(args, valid_data, args.batch_size_val, shuffle=False) # "True" to check training progress with validation function.
     
     print(valid_data_log, end="")
     main_log += valid_data_log
@@ -344,6 +345,7 @@ def main(args):
     
     # setup model
     print(dashed_line)
+    main_log += dashed_line + "\n"
     print("Init model")
     main_log += "Init model\n"
     model = Model(args)
@@ -361,14 +363,12 @@ def main(args):
     
     torch.save(
         pretrained,
-        f"trained_model/{args.method}/StrDA_round0.pth"
+        f"trained_model/{relative_path}/{args.model}_round0.pth"
     )
     print(f"Load pretrained model from {args.saved_model}")
-    main_log += "Load pretrained model\n"
+    main_log += f"Load pretrained model from {args.saved_model}\n"
     
-    print(main_log, file= open(f"log/{args.method}/log_StrDA.txt", "w"))
-
-    """ Setup loss """
+    # setup loss
     if args.Prediction == "CTC":
         criterion = torch.nn.CTCLoss(zero_infinity=True).to(device)
     else:
@@ -382,64 +382,65 @@ def main(args):
         filtered_parameters.append(p)
         params_num.append(np.prod(p.size()))
     print(f"Trainable params num: {sum(params_num)}")
-    main_log += f"Trainable params num: {sum(params_num)}"
+    main_log += f"Trainable params num: {sum(params_num)}\n"
 
     """ Final options """
-    args += "------------ Options -------------\n"
+    print("------------ Options -------------")
+    main_log += "------------ Options -------------\n"
     opt = vars(args)
     for k, v in opt.items():
         if str(k) == "character" and len(str(v)) > 500:
+            print(f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}")
             main_log += f"{str(k)}: So many characters to show all: number of characters: {len(str(v))}\n"
         else:
+            print(f"{str(k)}: {str(v)}")
             main_log += f"{str(k)}: {str(v)}\n"
-    main_log += "---------------------------------------\n"
-    print("Start Adapting...\n")
-    main_log += "Start Adapting...\n"
+    print(dashed_line)
+    main_log += dashed_line + "\n"
+    print("Start Adapting (Scene Text Recognition - STR)...\n")
+    main_log += "Start Adapting (Scene Text Recognition - STR)...\n"
     
     for round in range(args.num_subsets):
 
-        adapt_log = ""
-        print(f"\nRound {round+1}/{args.num_subsets}: \n")
-        adapt_log += f"\nRound {round+1}/{args.num_subsets}: \n"
+        print(f"Round {round+1}/{args.num_subsets}: \n")
+        main_log += f"\nRound {round+1}/{args.num_subsets}: \n" 
 
         # load best model of previous round
-        adapt_log +=  f"- Load best model of previous round ({round}). \n"
-        pretrained = torch.load(f"trained_model/{relative_path}/StrDA_round{round}.pth")
-        model.load_state_dict(pretrained)
+        print(f"- Load best model of round {round}.")
+        main_log +=  f"- Load best model of round {round}. \n"
+        model.load_state_dict(
+            torch.load(f"trained_model/{relative_path}/{args.model}_round{round}.pth")             
+        )
 
         # select subset
         try:
             adapting_list = list(np.load(f"stratify/{relative_path}/subset_{round + 1}.npy"))
         except:
-            raise ValueError(f"Subset_{round + 1}.npy not found.")
+            raise ValueError(f"stratify/{relative_path}/subset_{round + 1}.npy not found.")
         
         # assign pseudo labels
-        print("- Pseudo labeling \n")
-        adapt_log += "- Pseudo labeling \n"
-        list_adapt_data, pseudo_adapt, mean_conf = pseudo_labeling(
+        print("- Pseudo labeling...\n")
+        main_log += "- Pseudo labeling...\n"
+        list_adapt_data, list_pseudo_data, mean_conf = pseudo_labeling(
                 args, model, converter, target_data, adapting_list, round + 1
             )
 
-        data_log = ""
-        data_log += f"-- Number of apating data: {len(list_adapt_data)} \n"
-        data_log += f"-- Mean of confidences: {mean_conf} \n"
-
-        print(data_log)
-        adapt_log += data_log
-
+        print(f"- Number of adapting data: {len(list_adapt_data)}")
+        main_log += f"- Number of adapting data: {len(list_adapt_data)} \n"
+        print(f"- Mean of confidence score: {mean_conf}")
+        main_log += f"- Mean of confidence scores: {mean_conf} \n"
+    
         # restrict adapting data
         adapting_data = Subset(target_data, list_adapt_data)
-        adapting_data = Pseudolabel_Dataset(adapting_data, pseudo_adapt)
+        adapting_data = Pseudolabel_Dataset(adapting_data, list_pseudo_data)
 
-        if args.aug == True:
-            adapting_loader = get_dataloader(args, adapting_data, args.batch_size, shuffle=True, mode="adapt")
-        else:
-            adapting_loader = get_dataloader(args, adapting_data, args.batch_size, shuffle=True)
+        # get dataloader
+        adapting_loader = get_dataloader(args, adapting_data, args.batch_size, shuffle=True, aug=args.aug)
 
         # self-training
         print(dashed_line)
         print("- Seft-training...")
-        adapt_log += "\n- Seft-training"
+        main_log += "\n- Seft-training"
 
         # adjust mean_conf (round_down)
         mean_conf = int(mean_conf * 10)
@@ -455,8 +456,7 @@ def main(args):
         adapt_log += f"\nProcessing time: {self_training_end - self_training_start}s"
         adapt_log += f"\nSaved log for adapting round to: 'log/{args.method}/log_self_training_round{round + 1}.txt'"
 
-        adapt_log += "\n" + dashed_line + "\n"
-        main_log += adapt_log
+        main_log += "\n" + dashed_line + "\n"
 
         print(dashed_line)
         print(dashed_line)

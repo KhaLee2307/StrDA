@@ -60,14 +60,6 @@ def Equalize(img, **kwarg):
     return PIL.ImageOps.equalize(img)
 
 
-def Identity(img, **kwarg):
-    return img
-
-
-def Invert(img, **kwarg):
-    return PIL.ImageOps.invert(img)
-
-
 def Posterize(img, v, max_v, bias=0):
     v = _int_parameter(v, max_v) + bias
     return PIL.ImageOps.posterize(img, v)
@@ -78,11 +70,6 @@ def Rotate(img, v, max_v, bias=0):
     if random.random() < 0.5:
         v = -v
     return img.rotate(v)
-
-
-def Sharpness(img, v, max_v, bias=0):
-    v = _float_parameter(v, max_v) + bias
-    return PIL.ImageEnhance.Sharpness(img).enhance(v)
 
 
 def ShearX(img, v, max_v, bias=0):

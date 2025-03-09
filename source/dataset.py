@@ -16,7 +16,7 @@ _MEAN_IMAGENET = torch.tensor([0.485, 0.456, 0.406])
 _STD_IMAGENET  = torch.tensor([0.229, 0.224, 0.225])
 
 
-def get_dataloader(args, dataset, batch_size, shuffle = False, mode = "label"):
+def get_dataloader(args, dataset, batch_size, shuffle=False, aug=False):
     """
     Get dataloader for each dataset
 
@@ -32,10 +32,7 @@ def get_dataloader(args, dataset, batch_size, shuffle = False, mode = "label"):
     data_loader: torch.utils.data.DataLoader
     """
 
-    if mode == "raw":
-        myAlignCollate = AlignCollateRaw(args)
-    else:
-        myAlignCollate = AlignCollate(args, mode)
+    myAlignCollate = AlignCollate(args, aug)
 
     data_loader = DataLoader(
             dataset,
@@ -113,16 +110,17 @@ class Pseudolabel_Dataset(Dataset):
 
 class AlignCollate(object):
     """ Transform data to the same format """
-    def __init__(self, args, mode = "label"):
+    def __init__(self, args, aug=False):
         self.args = args
-        # resize image
-        if (mode == "adapt" or mode == "supervised"):
+        
+        if aug==True:
             self.transform = Rand_augment()
         else:
             self.transform = torchvision.transforms.Compose([])
 
+        # resize image
         self.resize = ResizeNormalize(args)
-        print("Use Text_augment", self.transform)
+        print("Labeled dataloader using Text_augment", self.transform)
 
     def __call__(self, batch):
         images, labels = zip(*batch)
@@ -131,22 +129,6 @@ class AlignCollate(object):
         image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
 
         return image_tensors, labels
-
-
-class AlignCollateRaw(object):
-    """ Transform data to the same format """
-    def __init__(self, args):
-        self.args = args
-        # resize image
-        self.transform = ResizeNormalize(args)
-
-    def __call__(self, batch):
-        images = batch
-
-        image_tensors = [self.transform(image) for image in images]
-        image_tensors = torch.cat([t.unsqueeze(0) for t in image_tensors], 0)
-
-        return image_tensors
 
 
 class AlignCollateHDGE(object):

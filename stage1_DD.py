@@ -60,11 +60,10 @@ def main(args):
 
     # load pretrained model (baseline)
     pretrained_state_dict = torch.load(args.saved_model)
+    print(f"Load pretrained model from {args.saved_model}")
     
     try:
-        model.load_state_dict(
-            pretrained_state_dict
-        )
+        model.load_state_dict(pretrained_state_dict)
     except:
         print("\n [*][WARNING] The pre-trained weights do not match the model! Carefully check!\n")
         state_dict = model.state_dict()
@@ -75,8 +74,6 @@ def main(args):
             #     print(key)
         model.load_state_dict(state_dict)
     
-    print(f"Load pretrained model from {args.saved_model}")
-
     model = model.to(device)
     # print(model.state_dict())
 
@@ -99,16 +96,9 @@ def main(args):
         target_data_adjust = Pseudolabel_Dataset(target_data_adjust_raw, np.full(len(target_data_adjust_raw), 1))
                 
         # get dataloader
-        if args.aug == True:
-            source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True, mode="adapt")
-        else:
-            source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True)
-            
-        if args.aug == True:
-            target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True, mode="adapt")
-        else:
-            target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True)
-
+        source_loader = get_dataloader(args, source_data, args.batch_size, shuffle=True, aug=args.aug)
+        target_loader = get_dataloader(args, target_data_adjust, args.batch_size, shuffle=True, aug=args.aug)
+        
         # set up iter dataloader
         source_loader_iter = iter(source_loader)
 

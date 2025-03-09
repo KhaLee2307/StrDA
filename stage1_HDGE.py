@@ -73,6 +73,7 @@ def main(args):
         dis_source.load_state_dict(ckpt["Da"])
         dis_target.load_state_dict(ckpt["Db"])
         
+        print(dashed_line)
         # Domain Stratifying (Harmonic Domain Gap Estimator - HDGE)
         HDGE = DomainStratifying(args, select_data)
         HDGE.stratify_HDGE(target_data_raw, dis_source, dis_target, args.beta)

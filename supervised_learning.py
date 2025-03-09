@@ -40,10 +40,8 @@ def main(args):
     main_log += "Load training data (source domain)...\n"
     
     train_data, train_data_log = hierarchical_dataset(args.train_data, args)
-    if args.aug:
-        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True, mode="supervised")
-    else:
-        train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True)
+
+    train_loader = get_dataloader(args, train_data, args.batch_size, shuffle=True, aug=args.aug)
     
     print(train_data_log, end="")
     main_log += train_data_log
@@ -223,10 +221,10 @@ def main(args):
     # save log
     print("Training is done!")
     main_log += "Training is done!"
-    print(main_log, file= open(f"log/supervised_learning.txt", "w"))
+    print(main_log, file= open(f"log/{args.model}_supervised.txt", "w"))
     
     print(f"Model is saved at trained_model/{args.model}_supervised.pth")
-    print("All information is saved at log/supervised_learning.txt")
+    print(f"All information is saved at log/{args.model}_supervised.txt")
     print(dashed_line)
     
     return

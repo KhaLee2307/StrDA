@@ -21,20 +21,6 @@ def cuda(xs):
             return [x.cuda() for x in xs]
 
 
-def get_traindata_link(dataset_dir):
-    dirs = {}
-    dirs["trainA"] = os.path.join(dataset_dir, "ltrainA")
-    dirs["trainB"] = os.path.join(dataset_dir, "ltrainB")
-    return dirs
-
-
-def get_testdata_link(dataset_dir):
-    dirs = {}
-    dirs["testA"] = os.path.join(dataset_dir, "ltestA")
-    dirs["testB"] = os.path.join(dataset_dir, "ltestB")
-    return dirs
-
-
 # to save the checkpoint
 def save_checkpoint(state, save_path):
     torch.save(state, save_path)

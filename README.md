@@ -16,7 +16,7 @@ In this paper, we propose the Stratified Domain Adaptation (StrDA) approach, a p
 * **Keywords:** scene text recognition (STR), unsupervised domain adaptation (UDA), self-training (ST), optical character recognition (OCR)
 
 ## News 🚀🚀🚀
-- `2025/03/06`: 📜 We have uploaded the instructions for running the code (include data guide).
+- `2025/03/06`: 📜 We have uploaded the instructions for running the code.
 - `2025/03/03`: 💻 We have released the implementation of StrDA for TRBA and CRNN.
 - `2025/02/28`: 🗣️ We attended the conference, you can view the poster and slides [here](WACV2025).
 - `2025/08/30`: 🔥 Our paper has been accepted to [WACV'25](https://wacv2025.thecvf.com/) (Algorithms Track).
@@ -36,11 +36,7 @@ In this paper, we propose the Stratified Domain Adaptation (StrDA) approach, a p
 * You can also create the environment using `docker build -t StrDA .`
 
 ### Datasets
-Thanks to [ku21fan/STR-Fewer-Labels](https://github.com/ku21fan/STR-Fewer-Labels/blob/main/data.md), [baudm/parseq](https://github.com/baudm/parseq/blob/main/Datasets.md), and [Mountchicken/Union14M](https://github.com/Mountchicken/Union14M) for compiling and organizing the data. Please follow their guidelines regarding the license of each dataset.
-
-- Evaluation datasets: LMDB archives for validation and testing
-- Synthetic datasets: LMDB archives for MJSynth (MJ), SynthTex (ST)
-- Real-world datasets: LMDB archives for ArT, COCO-Text (COCO), LSVT, MLT19, OpenVINO, RCTW17, ReCTS, UberText (Uber), TextOCR 
+Thanks to [ku21fan/STR-Fewer-Labels](https://github.com/ku21fan/STR-Fewer-Labels/blob/main/data.md), [baudm/parseq](https://github.com/baudm/parseq/blob/main/Datasets.md), and [Mountchicken/Union14M](https://github.com/Mountchicken/Union14M) for compiling and organizing the data. I highly recommend that you follow their guidelines to download the datasets and review the license of each dataset.
 
 ## Running the code
 *Please pay attention to the warnings when running the code (e.g., select_data for target domain data, checkpoint of HDGE, and trained weights of DD).*
