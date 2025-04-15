@@ -84,13 +84,13 @@ There are 2 main methods with many settings:
 ## Reference
 If you find our work useful for your research, please cite it and give us a star⭐!
 ```
-@InProceedings{Le_2025_WACV,
-    author    = {Le, Kha Nhat and Nguyen, Hoang-Tuan and Tran, Hung Tien and Ngo, Thanh Duc},
-    title     = {Stratified Domain Adaptation: A Progressive Self-Training Approach for Scene Text Recognition},
-    booktitle = {Proceedings of the Winter Conference on Applications of Computer Vision (WACV)},
-    month     = {February},
-    year      = {2025},
-    pages     = {8972-8982}
+@inproceedings{le2025stratified,
+  title={Stratified Domain Adaptation: A Progressive Self-Training Approach for Scene Text Recognition},
+  author={Le, Kha Nhat and Nguyen, Hoang-Tuan and Tran, Hung Tien and Ngo, Thanh Duc},
+  booktitle={2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  pages={8990--9000},
+  year={2025},
+  organization={IEEE}
 }
 ```
 
